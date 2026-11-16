@@ -1,0 +1,20 @@
+/* Scroll the original elements; the controls float above them without a gutter. */
+[data-scroll-area]{scrollbar-width:none!important;scrollbar-gutter:auto!important}
+[data-scroll-area]::-webkit-scrollbar{display:none;width:0;height:0}
+.scroll-overlay{position:fixed;inset:0;z-index:40;pointer-events:none;--scroll-size:.125rem;--scroll-wide-size:.3125rem;--scroll-hit-size:.875rem;--scroll-inset:.125rem;--scroll-thumb-min:1.75rem}
+.scroll-rail{position:fixed;pointer-events:auto;touch-action:none;user-select:none;outline:none;border:0;padding:0;background:transparent;--scroll-thumb:#9aa9ba;--scroll-active:#648f96}
+.scroll-rail[hidden]{display:none}
+.scroll-thumb{position:absolute;border-radius:.625rem;background:var(--scroll-thumb);opacity:.65;pointer-events:none;transition:width .2s,height .2s,opacity .2s}
+.scroll-rail.vertical{width:var(--scroll-hit-size)}
+.scroll-rail.vertical .scroll-thumb{right:var(--scroll-inset);top:0;width:var(--scroll-size);min-height:var(--scroll-thumb-min);transition:width .2s,opacity .2s}
+.scroll-rail.horizontal{height:var(--scroll-hit-size)}
+.scroll-rail.horizontal .scroll-thumb{bottom:var(--scroll-inset);left:0;height:var(--scroll-size);min-width:var(--scroll-thumb-min);transition:height .2s,opacity .2s}
+.scroll-rail.wide .scroll-thumb{opacity:.95}
+.scroll-rail.engaged .scroll-thumb{background:var(--scroll-active)}
+.scroll-rail.vertical.wide .scroll-thumb{width:var(--scroll-wide-size)}
+.scroll-rail.horizontal.wide .scroll-thumb{height:var(--scroll-wide-size)}
+.scroll-rail:focus-visible .scroll-thumb{outline:.0625rem solid var(--primary);outline-offset:.0625rem}
+html[data-theme=dark] .scroll-rail{--scroll-thumb:#63788e;--scroll-active:#79b8ad}
+#ble-devices{max-height:50vh;overflow:auto}
+dialog{max-height:calc(100vh - 48px);overflow:auto}
+@media(prefers-reduced-motion:reduce){.scroll-thumb{transition:none!important}}

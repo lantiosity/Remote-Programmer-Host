@@ -1,0 +1,16 @@
+# Local environments, output and user settings
+.git/
+**/bin/
+**/obj/
+**/__pycache__/
+**/*.pyc
+.vs/
+.venv*/
+build/
+publish/
+portable/
+.publish-backup/
+.wirelink*.json
+data/
+*.user
+*.log
