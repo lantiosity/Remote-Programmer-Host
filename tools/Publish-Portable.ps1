@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) { throw "Publish cleanup failed." }
 & "$app/engine/python.exe" -B tools/smoke-engine.py
 if ($LASTEXITCODE -ne 0) { throw 'Pruned engine import smoke test failed.' }
 [xml]$props = Get-Content -LiteralPath "$workspace/Directory.Build.props" -Raw
-$readme = (Get-Content -LiteralPath "$workspace/assets/PORTABLE-README.txt" -Raw).Replace('@VERSION@', [string]$props.Project.PropertyGroup.Version)
+$readme = (Get-Content -LiteralPath "$workspace/assets/PORTABLE-README.txt" -Raw -Encoding UTF8).Replace('@VERSION@', [string]$props.Project.PropertyGroup.Version)
 [IO.File]::WriteAllText("$staging/使用说明.txt", $readme, [Text.UTF8Encoding]::new($true))
 foreach ($settings in @("$destination/data/settings.json", "$destination/.wirelink-desktop.json")) {
     if (Test-Path -LiteralPath $settings) { Copy-Item -LiteralPath $settings -Destination "$staging/data/settings.json"; break }
