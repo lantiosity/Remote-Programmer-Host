@@ -1,4 +1,4 @@
-WireLink 0.2.0 便携版（Windows x64）
+WireLink @VERSION@ 便携版（Windows x64）
 
 双击 WireLink.exe 启动。请复制整个文件夹，不要只复制 EXE。
 

@@ -1,8 +1,8 @@
 #include <windows.h>
-1 ICON "WireLink.App/Assets/WireLink.ico"
+1 ICON "@ICON_PATH@"
 1 VERSIONINFO
-FILEVERSION 0,2,0,0
-PRODUCTVERSION 0,2,0,0
+FILEVERSION @VERSION_COMMA@
+PRODUCTVERSION @VERSION_COMMA@
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -12,8 +12,8 @@ BEGIN
     BEGIN
       VALUE "FileDescription", "WireLink"
       VALUE "ProductName", "WireLink"
-      VALUE "FileVersion", "0.2.0"
-      VALUE "ProductVersion", "0.2.0"
+      VALUE "FileVersion", "@VERSION@"
+      VALUE "ProductVersion", "@VERSION@"
     END
   END
   BLOCK "VarFileInfo"

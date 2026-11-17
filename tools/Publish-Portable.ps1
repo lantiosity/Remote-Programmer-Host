@@ -43,7 +43,9 @@ Copy-Item "$assets/targets.json", "$assets/target-packs.json", "$assets/packs-ma
 if ($LASTEXITCODE -ne 0) { throw "Publish cleanup failed." }
 & "$app/engine/python.exe" -B -c "import pyocd; from pyocd.probe import cmsis_dap_probe, stlink_probe, jlink_probe; from pyocd.probe.tcp_client_probe import TCPClientProbe; from pyocd.target.pack import pack_target; from pyocd.utility import usb; print('Pruned pyOCD backends imported:', pyocd.__version__)"
 if ($LASTEXITCODE -ne 0) { throw 'Pruned engine import smoke test failed.' }
-Copy-Item "$workspace/assets/PORTABLE-README.txt" "$staging/使用说明.txt" -Force
+[xml]$props = Get-Content -LiteralPath "$workspace/Directory.Build.props" -Raw
+$readme = (Get-Content -LiteralPath "$workspace/assets/PORTABLE-README.txt" -Raw).Replace('@VERSION@', [string]$props.Project.PropertyGroup.Version)
+[IO.File]::WriteAllText("$staging/使用说明.txt", $readme, [Text.UTF8Encoding]::new($true))
 foreach ($settings in @("$destination/data/settings.json", "$destination/.wirelink-desktop.json")) {
     if (Test-Path -LiteralPath $settings) { Copy-Item -LiteralPath $settings -Destination "$staging/data/settings.json"; break }
 }
@@ -52,7 +54,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Native launcher build failed.' }
 # Keep compiler intermediates out of the deliverable.
 $intermediates = Join-Path $workspace ('obj/launcher-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $intermediates | Out-Null
-Move-Item -LiteralPath "$staging/Launcher.obj", "$staging/Launcher.res" -Destination $intermediates
+Move-Item -LiteralPath "$staging/Launcher.obj", "$staging/Launcher.res", "$staging/Launcher.generated.rc" -Destination $intermediates
 if (Test-Path -LiteralPath $destination) {
     $backup = Join-Path $workspace ('.publish-backup/' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force (Split-Path $backup) | Out-Null
