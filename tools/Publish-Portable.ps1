@@ -41,7 +41,7 @@ Copy-Item "$assets/packs/*.pack" "$app/devices/packs" -Force
 Copy-Item "$assets/targets.json", "$assets/target-packs.json", "$assets/packs-manifest.json" "$app/devices" -Force
 & "$app/engine/python.exe" tools/prune-publish.py $app
 if ($LASTEXITCODE -ne 0) { throw "Publish cleanup failed." }
-& "$app/engine/python.exe" -B -c "import pyocd; from pyocd.probe import cmsis_dap_probe, stlink_probe, jlink_probe; from pyocd.probe.tcp_client_probe import TCPClientProbe; from pyocd.target.pack import pack_target; from pyocd.utility import usb; print('Pruned pyOCD backends imported:', pyocd.__version__)"
+& "$app/engine/python.exe" -B tools/smoke-engine.py
 if ($LASTEXITCODE -ne 0) { throw 'Pruned engine import smoke test failed.' }
 [xml]$props = Get-Content -LiteralPath "$workspace/Directory.Build.props" -Raw
 $readme = (Get-Content -LiteralPath "$workspace/assets/PORTABLE-README.txt" -Raw).Replace('@VERSION@', [string]$props.Project.PropertyGroup.Version)
