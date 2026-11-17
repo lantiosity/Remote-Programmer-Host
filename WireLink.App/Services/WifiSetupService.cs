@@ -15,7 +15,7 @@ public static class WifiSetupService
         if (request.Link is not ("USB" or "BLE" or "UART")) throw new ArgumentException("配网请选择 USB 或 BLE");
         WifiSetupProtocol.Command("00000000", request.Operation, request.Ssid, request.Password);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(40));
+        timeout.CancelAfter(TimeSpan.FromSeconds(request.Operation == "scan" ? 90 : 40));
         var token = timeout.Token;
         BleConnection? ble = null;
         WiredOtaTransport? usb = null;
@@ -73,20 +73,12 @@ public static class WifiSetupService
                 }
                 // Never forward console echo: the command contains credentials.
                 port!.WriteLine("wificfg " + command);
-                var buffer = new StringBuilder();
+                var parser = new WifiConsoleParser();
                 while (true)
                 {
-                    token.ThrowIfCancellationRequested(); buffer.Append(port.ReadExisting());
-                    var text = buffer.ToString();
-                    var prefix = text.IndexOf("WLWIFI {", StringComparison.Ordinal);
-                    var end = prefix >= 0 ? text.IndexOf('\n', prefix) : -1;
-                    if (end >= 0)
-                    {
-                        var response = WifiSetupProtocol.ParseResponse(text[(prefix + 7)..end].Trim(), id);
-                        if (response != null) return response;
-                        buffer.Remove(0, end + 1);
-                    }
-                    if (buffer.Length > 16384) buffer.Remove(0, buffer.Length - 8192);
+                    token.ThrowIfCancellationRequested();
+                    var response = parser.Feed(port.ReadExisting(), id);
+                    if (response != null) return response;
                     await Task.Delay(40, token);
                 }
             }

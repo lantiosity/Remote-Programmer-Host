@@ -5,6 +5,17 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("UART 配网过滤回显、残帧和旧请求并重组分片", () =>
+        {
+            var parser = new WireLink.Core.WifiConsoleParser();
+            Check(parser.Feed("wificfg aaaaaaaa save secret\r\nWLWIFI {broken}\nWLWIFI {\"id\":\"old\",\"ok\":true}\nWL", "aaaaaaaa") == null);
+            Check(parser.Feed("WIFI {\"id\":\"aaaaaaaa\",\"ok\":true", "aaaaaaaa") == null);
+            Check(parser.Feed("}\r\n", "aaaaaaaa")?["ok"]?.GetValue<bool>() == true);
+            Check(parser.Feed(new string('x', 20000) + "\nWLWIFI {\"id\":\"aaaaaaaa\",\"ok\":true}\n", "aaaaaaaa") != null);
+            try { parser.Feed("WLWIFI {\"id\":\"aaaaaaaa\",\"ok\":false,\"error\":\"scan_failed\"}\n", "aaaaaaaa"); throw new Exception("Missing device error"); }
+            catch (IOException) { }
+            return Task.CompletedTask;
+        }));
         tests.Add(("串口并发发送与重复释放有界结束", async () =>
         {
             var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
