@@ -16,6 +16,24 @@ public abstract class WiredOtaTransport : IOtaSession
     public abstract int Mtu { get; }
     public virtual int ChunkSize => Mtu - 7;
     private byte[]? committed;
+    private readonly SemaphoreSlim exchangeGate = new(1, 1);
+    private bool faulted;
+    private async Task<byte[]> ExchangeAsync(byte kind, byte[] data, CancellationToken ct)
+    {
+        await exchangeGate.WaitAsync(ct);
+        try
+        {
+            if (faulted) throw new IOException("传输已失效，请重新连接设备");
+            return await RequestAsync(kind, data, ct).WaitAsync(TimeSpan.FromSeconds(20), ct);
+        }
+        catch
+        {
+            faulted = true; committed = null;
+            try { await DisposeAsync(); } catch { /* Preserve the request failure. */ }
+            throw;
+        }
+        finally { exchangeGate.Release(); }
+    }
     protected abstract Task<byte[]> RequestAsync(byte kind, byte[] data, CancellationToken ct);
     public abstract ValueTask DisposeAsync();
 
@@ -26,7 +44,9 @@ public abstract class WiredOtaTransport : IOtaSession
         {
             var offset = new byte[2];
             BinaryPrimitives.WriteUInt16LittleEndian(offset, (ushort)bytes.Length);
-            var part = await RequestAsync(4, offset, ct);
+            var part = await ExchangeAsync(4, offset, ct);
+            if (part.Length > (Mtu == 63 ? 57 : 512) || bytes.Length + part.Length > 512)
+                throw new InvalidDataException("OTA 设备信息超出协议上限");
             bytes.Write(part);
             if (part.Length < (Mtu == 63 ? 57 : 512))
                 return JsonNode.Parse(Encoding.UTF8.GetString(bytes.ToArray()))!.AsObject();
@@ -37,11 +57,11 @@ public abstract class WiredOtaTransport : IOtaSession
     {
         var bytes = committed;
         committed = null;
-        return OtaStatus.Parse(bytes ?? await RequestAsync(3, [], ct));
+        return OtaStatus.Parse(bytes ?? await ExchangeAsync(3, [], ct));
     }
-    public async Task ControlAsync(byte[] data, CancellationToken ct) => committed = await RequestAsync(1, data, ct);
-    public async Task DataAsync(byte[] data, CancellationToken ct) => committed = await RequestAsync(2, data, ct);
-    public async Task ArmAsync(CancellationToken ct) => committed = await RequestAsync(5, [0x2c, 0x01], ct);
+    public async Task ControlAsync(byte[] data, CancellationToken ct) => committed = await ExchangeAsync(1, data, ct);
+    public async Task DataAsync(byte[] data, CancellationToken ct) => committed = await ExchangeAsync(2, data, ct);
+    public async Task ArmAsync(CancellationToken ct) => committed = await ExchangeAsync(5, [0x2c, 0x01], ct);
     public async Task WifiWriteAsync(byte[] command, CancellationToken ct)
     {
         if (Mtu != 63) throw new InvalidOperationException("WiFi 配置请使用原生 USB 或 BLE");
@@ -50,7 +70,7 @@ public abstract class WiredOtaTransport : IOtaSession
             var part = new byte[1 + Math.Min(60, command.Length - offset)];
             part[0] = offset == 0 ? (byte)1 : (byte)0;
             command.AsSpan(offset, part.Length - 1).CopyTo(part.AsSpan(1));
-            await RequestAsync(6, part, ct);
+            await ExchangeAsync(6, part, ct);
         }
     }
     public async Task<string> WifiReadAsync(CancellationToken ct)
@@ -59,7 +79,9 @@ public abstract class WiredOtaTransport : IOtaSession
         while (bytes.Length < 512)
         {
             var offset = new byte[2]; BinaryPrimitives.WriteUInt16LittleEndian(offset, (ushort)bytes.Length);
-            var part = await RequestAsync(7, offset, ct); bytes.Write(part);
+            var part = await ExchangeAsync(7, offset, ct);
+            if (part.Length > 57 || bytes.Length + part.Length > 512) throw new IOException("WiFi 配置响应超出协议上限");
+            bytes.Write(part);
             if (part.Length < 57) return Encoding.UTF8.GetString(bytes.ToArray());
         }
         throw new IOException("WiFi 配置响应过长");
@@ -79,20 +101,38 @@ public abstract class WiredOtaTransport : IOtaSession
         var devices = await DeviceInformation.FindAllAsync(selector).AsTask(ct);
         if (devices.Count != 1 && string.IsNullOrWhiteSpace(expected))
             throw new IOException("请连接一台 ESP-SWD，或填写 USB / OTA 设备序列号");
-        foreach (var device in devices)
+        return await SelectUsbAsync(devices.Select(device => (Func<CancellationToken, Task<WiredOtaTransport?>>)(async token =>
         {
-            var hid = await HidDevice.FromIdAsync(device.Id, FileAccessMode.ReadWrite).AsTask(ct);
-            if (hid == null) continue;
-            var transport = new UsbOta(hid);
+            var hid = await HidDevice.FromIdAsync(device.Id, FileAccessMode.ReadWrite).AsTask(token);
+            return hid == null ? null : new UsbOta(hid);
+        })), expected, ct);
+    }
+
+    public static async Task<WiredOtaTransport> SelectUsbAsync(
+        IEnumerable<Func<CancellationToken, Task<WiredOtaTransport?>>> candidates, string expected, CancellationToken ct)
+    {
+        var failures = new List<Exception>();
+        foreach (var open in candidates)
+        {
+            ct.ThrowIfCancellationRequested();
+            WiredOtaTransport? transport = null;
             try
             {
-                var info = await transport.InfoAsync(ct);
-                if (string.IsNullOrWhiteSpace(expected) || info["serial"]?.GetValue<string>() == expected) return transport;
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attempt.CancelAfter(TimeSpan.FromSeconds(5));
+                transport = await open(attempt.Token);
+                if (transport == null) { failures.Add(new IOException("USB 设备不可访问")); continue; }
+                var info = await transport.InfoAsync(attempt.Token);
+                if (string.IsNullOrWhiteSpace(expected) || info["serial"]?.GetValue<string>() == expected)
+                { var selected = transport; transport = null; return selected; }
             }
-            catch { await transport.DisposeAsync(); throw; }
-            await transport.DisposeAsync();
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.Text.Json.JsonException or TimeoutException)
+            { failures.Add(ex); }
+            finally { if (transport != null) await transport.DisposeAsync(); }
         }
-        throw new IOException("未找到指定 USB OTA 设备，请先通过 ROM USB 安装 1.2.0 固件");
+        throw new IOException($"未找到指定 USB 设备（失败候选 {failures.Count} 个），请检查序列号、占用及固件支持。",
+            failures.Count == 0 ? null : new AggregateException(failures));
     }
 
     private sealed class TcpOta(TcpClient client) : WiredOtaTransport
@@ -124,6 +164,8 @@ public abstract class WiredOtaTransport : IOtaSession
     private sealed class UsbOta : WiredOtaTransport
     {
         private readonly HidDevice device;
+        private int disposed;
+        private Exception? receiveFailure;
         private readonly Channel<byte[]> reports = Channel.CreateBounded<byte[]>(8);
         public override int Mtu => 63;
         public UsbOta(HidDevice device)
@@ -131,8 +173,11 @@ public abstract class WiredOtaTransport : IOtaSession
             this.device = device;
             device.InputReportReceived += Received;
         }
-        private void Received(HidDevice sender, HidInputReportReceivedEventArgs args) =>
-            reports.Writer.TryWrite(args.Report.Data.ToArray());
+        private void Received(HidDevice sender, HidInputReportReceivedEventArgs args)
+        {
+            if (!reports.Writer.TryWrite(args.Report.Data.ToArray()))
+                Interlocked.CompareExchange(ref receiveFailure, new IOException("USB 响应队列溢出，连接已失效"), null);
+        }
 
         protected override async Task<byte[]> RequestAsync(byte kind, byte[] data, CancellationToken ct)
         {
@@ -140,6 +185,8 @@ public abstract class WiredOtaTransport : IOtaSession
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(20));
             var token = timeout.Token;
+            if (Volatile.Read(ref receiveFailure) is Exception failed) throw new IOException("USB 接收失败", failed);
+            while (reports.Reader.TryRead(out _)) { }
             var report = device.CreateOutputReport(0);
             var packet = new byte[65]; // Windows HID includes report ID 0.
             packet[1] = 0x80; packet[2] = kind; packet[3] = (byte)data.Length;
@@ -147,6 +194,7 @@ public abstract class WiredOtaTransport : IOtaSession
             report.Data = packet.AsBuffer();
             await device.SendOutputReportAsync(report).AsTask(token);
             var bytes = await reports.Reader.ReadAsync(token);
+            if (Volatile.Read(ref receiveFailure) is Exception failedRead) throw new IOException("USB 接收失败", failedRead);
             if (bytes.Length != 65 || bytes[1] != 0x80 || bytes[2] != kind || bytes[3] > 57)
                 throw new InvalidDataException("USB OTA 响应无效，请先通过 ROM USB 安装 1.2.0 固件");
             var error = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(4));
@@ -155,6 +203,7 @@ public abstract class WiredOtaTransport : IOtaSession
         }
         public override ValueTask DisposeAsync()
         {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return ValueTask.CompletedTask;
             device.InputReportReceived -= Received;
             device.Dispose();
             reports.Writer.TryComplete();
