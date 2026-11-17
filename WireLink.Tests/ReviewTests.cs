@@ -5,6 +5,21 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("BLE DAP 请求使用带响应写入并转发通知", async () =>
+        {
+            var ble = new BleFake();
+            await using var bridge = await BleDapBridge.StartAsync(ble, CancellationToken.None);
+            using var client = new System.Net.Sockets.TcpClient();
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, bridge.Port);
+            await client.GetStream().WriteAsync(new byte[] { 1, 2, 3 });
+            await ble.Written.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Check(ble.WithResponse);
+            ble.Receive!(new byte[] { 4, 5 });
+            var result = new byte[2];
+            using var limit = new CancellationTokenSource(3000);
+            await client.GetStream().ReadExactlyAsync(result, limit.Token);
+            Check(result.SequenceEqual(new byte[] { 4, 5 }));
+        }));
         tests.Add(("USB 枚举跳过故障设备和序列号不匹配设备", async () =>
         {
             var bad = new UsbFake { Fail = true }; var wrong = new UsbFake { Serial = "other" }; var wanted = new UsbFake();
@@ -65,5 +80,14 @@ internal static class ReviewTests
             return FullPages ? new byte[57] : System.Text.Encoding.UTF8.GetBytes("{\"serial\":\"" + Serial + "\"}");
         }
         public override ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+    }
+    private sealed class BleFake : IBleDapConnection
+    {
+        public Action<byte[]>? Receive;
+        public bool WithResponse;
+        public readonly TaskCompletionSource Written = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task SubscribeAsync(string id, Action<byte[]> receive, CancellationToken ct) { Receive = receive; return Task.CompletedTask; }
+        public Task WriteChunksAsync(string id, byte[] data, CancellationToken ct, bool response = false)
+        { WithResponse = response; Written.TrySetResult(); return Task.CompletedTask; }
     }
 }

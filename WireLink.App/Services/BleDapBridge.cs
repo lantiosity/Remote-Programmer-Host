@@ -6,7 +6,10 @@ namespace WireLink.App.Services;
 
 public sealed class BleDapBridge : IAsyncDisposable
 {
-    private readonly BleConnection connection;
+    private readonly IBleDapConnection connection;
+    private readonly Action<string>? report;
+    private Exception? failure;
+    public Exception? Failure => Volatile.Read(ref failure);
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource stop = new();
     private readonly Task loop;
@@ -14,25 +17,33 @@ public sealed class BleDapBridge : IAsyncDisposable
         { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait });
     public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
 
-    private BleDapBridge(BleConnection connection)
+    private BleDapBridge(IBleDapConnection connection, Action<string>? report)
     {
         this.connection = connection;
+        this.report = report;
         listener.Start(1);
         loop = RunAsync();
     }
 
-    public static async Task<BleDapBridge> StartAsync(BleConnection connection, CancellationToken ct)
+    public static async Task<BleDapBridge> StartAsync(IBleDapConnection connection, CancellationToken ct, Action<string>? report = null)
     {
-        var bridge = new BleDapBridge(connection);
+        var bridge = new BleDapBridge(connection, report);
         try
         {
             await connection.SubscribeAsync("12", data =>
             {
-                if (!bridge.notifications.Writer.TryWrite(data)) bridge.stop.Cancel();
+                if (!bridge.notifications.Writer.TryWrite(data)) bridge.Fail(new IOException("BLE DAP 通知缓冲区溢出，连接已关闭以避免截断数据，请重新连接。"));
             }, ct);
             return bridge;
         }
         catch { await bridge.DisposeAsync(); throw; }
+    }
+
+    private void Fail(Exception error)
+    {
+        if (Interlocked.CompareExchange(ref failure, error, null) != null) return;
+        report?.Invoke(error.Message);
+        stop.Cancel();
     }
 
     private async Task RunAsync()
@@ -59,7 +70,7 @@ public sealed class BleDapBridge : IAsyncDisposable
                     {
                         var count = await stream.ReadAsync(buffer, session.Token);
                         if (count == 0) break;
-                        await connection.WriteChunksAsync("11", buffer.AsSpan(0, count).ToArray(), session.Token);
+                        await connection.WriteChunksAsync("11", buffer.AsSpan(0, count).ToArray(), session.Token, response: true);
                     }
                 }
                 finally
@@ -69,7 +80,8 @@ public sealed class BleDapBridge : IAsyncDisposable
                 }
             }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or SocketException or ObjectDisposedException) { }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or SocketException or ObjectDisposedException)
+        { if (!stop.IsCancellationRequested) Fail(new IOException("BLE DAP 桥连接失败：" + ex.Message, ex)); }
     }
 
     public async ValueTask DisposeAsync()

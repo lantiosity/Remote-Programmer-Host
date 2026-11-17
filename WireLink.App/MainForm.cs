@@ -390,7 +390,7 @@ public sealed class MainForm : ChromeForm
                         Phase("正在连接 BLE DAP 服务…");
                         var address = await BleConnection.ResolveAsync(value, ct);
                         await using var ble = await BleConnection.ConnectAsync(address, "10", ct);
-                        await using var bridge = await BleDapBridge.StartAsync(ble, ct);
+                        await using var bridge = await BleDapBridge.StartAsync(ble, ct, Log);
                         Phase($"蓝牙已连接 · MTU {ble.Mtu}");
                         await pyocd.RunAsync(PyOcdCommand.Build(value, action, bridge.Port), ct);
                     }
