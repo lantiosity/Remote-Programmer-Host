@@ -26,5 +26,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           dotnet run --project WireLink.Tests -c Release
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B tests/test_remote.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node --test tests/*.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

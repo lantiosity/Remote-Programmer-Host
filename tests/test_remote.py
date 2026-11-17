@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'WireLink.App/engine'))
 import wirelink_pyocd
 wirelink_pyocd.install()
-from pyocd.probe.tcp_client_probe import RemoteMemoryInterface
+from pyocd.probe.tcp_client_probe import RemoteMemoryInterface, TCPClientProbe
 
 class Probe:
     def __init__(self):
@@ -44,5 +44,16 @@ class RemoteTests(unittest.TestCase):
         memory.write_memory_block32(0, [])
         self.assertEqual(memory.read_memory_block8(0, 0), [])
         self.assertEqual(probe.calls, [])
+    def test_ap_multiple_preserves_deferred_results_and_bounds_requests(self):
+        probe = TCPClientProbe('127.0.0.1:5555'); calls = []
+        def write(name, addr, values):
+            calls.append(values)
+            self.assertLess(len(json.dumps({'id': 1, 'request': name, 'arguments': [addr, values]})), 20480)
+        probe._perform_request = write
+        probe.write_ap_multiple(0xfc, [0xffffffff] * 4096)
+        self.assertEqual([len(c) for c in calls], [1024] * 4)
+        probe._perform_request_without_raise = lambda name, addr, count: ([7] * count, None)
+        complete = probe.read_ap_multiple(0xfc, 4096, now=False)
+        self.assertTrue(callable(complete)); self.assertEqual(complete(), [7] * 4096)
 
 if __name__ == '__main__': unittest.main()
