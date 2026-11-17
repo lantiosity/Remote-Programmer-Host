@@ -57,6 +57,8 @@ if (Test-Path -LiteralPath $destination) {
     $backup = Join-Path $workspace ('.publish-backup/' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force (Split-Path $backup) | Out-Null
     Move-Item -LiteralPath $destination -Destination $backup
+    Set-Content -LiteralPath (Join-Path $backup '.wirelink-backup') -Value 'WireLink portable publish backup' -Encoding utf8
 }
 Move-Item -LiteralPath $staging -Destination $destination
+& "$PSScriptRoot/Prune-PublishBackups.ps1" -Keep 3
 Write-Host "Portable Windows x64 application: $Output"
