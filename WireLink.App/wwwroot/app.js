@@ -180,14 +180,14 @@ function data(kind, value) {
     if (!value.includes(state.settings.com_port)) setSetting('com_port', value[0] || '');
     log('串口：' + (value.join(', ') || '未发现'));
   } else if (kind === 'scan') {
-    if (!value.length) { toast('没有发现 ESP-SWD 蓝牙设备，请检查电源及电脑蓝牙。'); return; }
+    if (!value.length) { toast('没有发现蓝牙设备，请检查电源及电脑蓝牙。'); return; }
     const list = $('#ble-devices');
     list.replaceChildren();
     value.forEach(device => {
       const button = document.createElement('button');
       button.className = 'ble-device';
       const copy = document.createElement('div');
-      const name = document.createElement('strong'); name.textContent = device.name || 'ESP-SWD';
+      const name = document.createElement('strong'); name.textContent = device.name || device.address;
       const address = document.createElement('small'); address.textContent = device.address;
       const signal = document.createElement('span'); signal.textContent = `${device.rssi} dBm`;
       copy.append(name, address); button.append(copy, signal);
