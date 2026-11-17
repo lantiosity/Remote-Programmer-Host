@@ -19,6 +19,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
     <Content Include="wwwroot/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="engine/*.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets/WireLink.ico" LogicalName="WireLink.App.Assets.WireLink.ico" />
   </ItemGroup>
   <Target Name="GenerateVersionedManifest" BeforeTargets="PrepareForBuild">

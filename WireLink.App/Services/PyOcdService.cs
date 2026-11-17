@@ -29,6 +29,14 @@ public sealed class PyOcdService(string root, Action<string> log)
             }
         };
         var arguments = args.ToList();
+        var moduleIndex = arguments.IndexOf("-m");
+        if (moduleIndex >= 0 && moduleIndex + 1 < arguments.Count && arguments[moduleIndex + 1] == "pyocd")
+        {
+            var entry = Path.Combine(AppContext.BaseDirectory, "engine", "wirelink_pyocd.py");
+            if (!File.Exists(entry)) throw new FileNotFoundException("缺少 remote 传输适配入口", entry);
+            arguments.RemoveRange(moduleIndex, 2);
+            arguments.Insert(moduleIndex, entry);
+        }
         var targetIndex = arguments.IndexOf("-t");
         var mapFile = Path.Combine(AppContext.BaseDirectory, "devices", "target-packs.json");
         if (targetIndex >= 0 && File.Exists(mapFile))
