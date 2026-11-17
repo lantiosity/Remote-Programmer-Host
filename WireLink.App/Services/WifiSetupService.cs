@@ -27,7 +27,7 @@ public static class WifiSetupService
                 var address = await BleConnection.ResolveAsync(settings, token);
                 try { ble = await BleConnection.ConnectAsync(address, "30", token); }
                 catch (IOException ex) when (ex.Message.Contains("缺少蓝牙服务"))
-                { throw new IOException("此固件尚无 BLE 配网接口，请先安装支持配网功能的固件（当前首版为 0.1.0）。", ex); }
+                { throw new IOException("此固件尚无 BLE 配网接口，请先安装支持配网功能的固件。", ex); }
             }
             else if (request.Link == "USB")
             {

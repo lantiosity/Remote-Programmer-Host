@@ -21,4 +21,11 @@
     <Content Include="wwwroot/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets/WireLink.ico" LogicalName="WireLink.App.Assets.WireLink.ico" />
   </ItemGroup>
+  <Target Name="GenerateVersionedManifest" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ApplicationManifest>$(IntermediateOutputPath)app.manifest</ApplicationManifest>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(ApplicationManifest)" Lines="$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/app.manifest').Replace('WIRELINK_VERSION', '$(AssemblyVersion)'))" Overwrite="true" Encoding="UTF-8" />
+  </Target>
 </Project>

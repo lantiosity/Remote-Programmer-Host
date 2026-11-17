@@ -17,7 +17,7 @@
 </head>
 <body>
   <aside class="sidebar" data-scroll-area="侧栏">
-    <div class="brand"><div class="brandmark">W<span></span></div><div>WireLink<small>REMOTE PROGRAMMER</small></div><span class="version" data-app-version>0.2.0</span></div>
+    <div class="brand"><div class="brandmark">W<span></span></div><div>WireLink<small>REMOTE PROGRAMMER</small></div><span class="version" data-app-version>—</span></div>
     <div class="section-label">工作空间</div>
     <nav aria-label="功能导航">
       <button class="nav-item active" data-page="flash"><span class="nav-icon">↯</span>目标芯片烧录<span class="nav-count">01</span></button>
@@ -99,7 +99,7 @@
 
       <section class="page hidden" id="page-wifi">
         <div class="page-heading"><div><div class="eyebrow">CONNECT YOUR PROGRAMMER</div><h1>WiFi 配置<span class="heading-dot">.</span></h1><p>让烧录器接入你的 2.4 GHz 无线网络。</p></div><span class="chip-badge">WiFi <span>USB / BLE SETUP</span></span></div>
-        <div class="notice"><span>i</span><p>需要烧录器固件 <b>支持配网功能的固件（首版 0.1.0）</b>。BLE 保存或清除配置前，长按烧录器 <b>BOOT 约 2 秒</b>开放配置窗口。<br>保存后烧录器会重启；密码不会保存在电脑设置或运行日志中。</p></div>
+        <div class="notice"><span>i</span><p>需要烧录器固件 <b>声明配网能力的固件</b>。BLE 保存或清除配置前，长按烧录器 <b>BOOT 约 2 秒</b>开放配置窗口。<br>保存后烧录器会重启；密码不会保存在电脑设置或运行日志中。控制台配网命令可能被设备回显，请勿同时录制控制台。</p></div>
         <div class="card"><div class="card-title"><span class="step">01</span><h2>连接烧录器</h2></div>
           <div class="wifi-link-row"><label>配置方式<select id="wifi-link"><option value="BLE">BLE · 无线配置</option><option value="USB">USB · 原生 USB 接口</option><option value="UART">USB · CH343 控制台</option></select></label><label id="wifi-console" class="hidden">CH343 控制台串口<div class="wifi-port-row"><input data-setting="wifi_port" list="wifi-ports" placeholder="例如 COM8"><datalist id="wifi-ports"></datalist><button class="button" id="wifi-refresh-ports" type="button">刷新串口</button></div></label><button class="button" data-action="wifi_status">读取状态</button></div>
           <p class="hint" id="wifi-link-hint">使用左侧 BLE 设备名称和蓝牙地址。其他调试、升级或串口任务需先停止。</p>
@@ -120,7 +120,7 @@
         <div class="log-toolbar"><span>运行日志 <b id="log-count">0</b></span><div><button class="text-button" id="clear-log">清空</button><button class="text-button" id="export">导出日志 ↗</button></div></div>
         <pre id="logs" aria-label="运行日志" data-scroll-area="运行日志" tabindex="0"></pre>
       </section>
-      <footer><span>WireLink <span data-app-version>0.2.0</span> <i>·</i> CMSIS-DAP / SWD</span><span id="footer-hint">配置自动保存于项目目录</span></footer>
+      <footer><span>WireLink <span data-app-version>—</span> <i>·</i> CMSIS-DAP / SWD</span><span id="footer-hint">配置自动保存于项目目录</span></footer>
     </div>
   </main>
   <section id="target-menu" class="picker-popup target-popup hidden" role="dialog" aria-label="按厂商、系列、型号选择芯片">
