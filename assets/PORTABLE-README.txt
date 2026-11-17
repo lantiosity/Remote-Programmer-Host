@@ -16,6 +16,8 @@ WireLink @VERSION@ 便携版（Windows x64）
 
 工作台显示后延迟静默加载一次芯片目录，当次运行只在点击刷新时重新加载。
 
+WiFi/BLE 的大块内存请求由上位机自动分块，不放宽固件校验。WiFi OTA 端口可配置（默认 5557），USB/BLE 读取信息可同步实际端口。BLE OTA 首次会请求 Windows 配对，并要求加密连接；未完成时请在系统蓝牙设置中配对。USB 授权仅限 USB，无线升级或 BLE 配网前请长按运行中设备的 BOOT 约 2 秒。状态中的授权窗口不代表所有链路均已开放。
+
 第三方许可保留在 app/engine、app/browser 及 app/devices/packs 的原始包文件中。构建脚本需要 .NET SDK 和 Visual Studio C++ 工具；普通使用不需要这些开发工具。
 
 构建时可用 Publish-Portable.ps1 -IncludeBrowser 生成带固定版浏览器的离线完整包；这会额外增加约 678 MiB。默认不携带 browser 目录。
