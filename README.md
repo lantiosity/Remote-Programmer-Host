@@ -1,4 +1,4 @@
-# WireLink 上位机 0.2.0
+# WireLink 上位机 0.2.1
 
 C# / .NET 8 WinForms + WebView2 远程烧录工作台。支持 USB、WiFi、BLE、目标串口、芯片选择、固件升级及 USB/BLE 配网。固件在独立仓库维护，本仓库不依赖其源码目录。
 
@@ -21,7 +21,7 @@ python tools/prepare-assets.py
 .\build.cmd
 ```
 
-下载资源保存在被 Git 忽略的 `portable/`。Python 固定为 3.14.2，pyOCD 固定为 0.46.1，依赖清单见 `assets/runtime-requirements.txt`；STM32 设备目录及设备包版本、下载地址和 SHA256 见 `assets/`。设备包可能受各自许可约束。`prepare-assets.py` 需要联网，未在本次整理中重新下载全部资源。
+下载资源保存在被 Git 忽略的 `portable/`。Python 固定为 3.14.2，pyOCD 固定为 0.46.1，依赖清单见 `assets/runtime-requirements.txt`；运行时下载地址、SHA256 见 `assets/runtime-assets.json`；STM32 设备目录及设备包校验值见 `assets/`。设备包可能受各自许可约束。`prepare-assets.py` 需要联网，且会拒绝校验不符的文件；微软引导安装器更新时须核实签名并显式更新清单，不能自动跳过校验。发布前验证缓存及提取后的 Python，精简后验证 pyOCD 后端导入。脚本创建的旧发布备份保留最近 3 份，未标记的历史目录不自动删除。
 
 输出在 `publish/`：保留所有文件后可以复制到其他 Windows 10/11 x64 设备，双击 `WireLink.exe`。已包含 .NET 与 pyOCD；使用系统 WebView2，缺少时调用微软签名的引导安装器，需要联网。Edge 浏览器的存在本身不保证 WebView2 Runtime 已安装。语言资源保留在 `app/lang/`。仅一个 `app/WebView2Loader.dll`。
 
@@ -35,9 +35,11 @@ python tools/prepare-assets.py
 
 ```powershell
 dotnet run --project WireLink.Tests -c Release
-node --test tests/pickers.test.cjs tests/scrollbars.test.cjs
+node --test tests/*.test.cjs
 ```
 
 C# 测试需要 pyOCD 解释器，可设置 `WIRELINK_PYTHON`。普通测试不会连接或写入硬件；硬件测试必须显式传入参数。
 
-`release/0.2.0/` 是首版源码归档，包含源文件清单、SHA256 和说明，不包含 EXE。后续版本分别新增版本目录，不覆盖既有归档。修改源码后重新生成新版本归档，不能将旧快照视为当前工作区的自动镜像。版本统一在 `Directory.Build.props` 设置。
+当前发行目录为 `release/0.2.1/`，包含源码 ZIP 和可直接使用的 `WireLink-0.2.1-win-x64.7z`。便携包需完整解压后双击 EXE，包含运行依赖及语言资源，不携带个人设置和固件镜像；校验值与文件清单位于同目录。大型便携包及其生成清单不进入 Git，源码、源码 ZIP、版本说明和压缩包校验值纳入版本管理。`release/0.2.0/` 保留旧版，不覆盖既有归档。版本统一在 `Directory.Build.props` 设置。
+
+0.2.1 的审阅项处理、验证边界和后续实机项目见 `docs/REPAIR_PLAN_0.2.1.md`。Windows CI 执行无硬件构建与回归；真实设备测试不自动执行。
