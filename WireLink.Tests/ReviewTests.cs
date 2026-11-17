@@ -5,6 +5,36 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("OTA 使用配置的 TCP 端口并解析设备信息", async () =>
+        {
+            var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            try
+            {
+                var serving = Task.Run(async () =>
+                {
+                    using var peer = await listener.AcceptTcpClientAsync();
+                    var stream = peer.GetStream(); var header = new byte[8];
+                    using var limit = new CancellationTokenSource(5000);
+                    await stream.ReadExactlyAsync(header, limit.Token);
+                    Check(System.Text.Encoding.ASCII.GetString(header, 0, 4) == "WLO1" && header[4] == 4);
+                    var data = new byte[System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(6))];
+                    await stream.ReadExactlyAsync(data, limit.Token);
+                    var json = System.Text.Encoding.UTF8.GetBytes("{\"serial\":\"port-test\",\"ota_port\":12345}");
+                    header[4] |= 0x80;
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(6), (ushort)(json.Length + 4));
+                    await stream.WriteAsync(header, limit.Token);
+                    await stream.WriteAsync(new byte[4], limit.Token);
+                    await stream.WriteAsync(json, limit.Token);
+                });
+                using var timeout = new CancellationTokenSource(5000);
+                await using var link = await WiredOtaTransport.OpenAsync(new WireLink.Core.Settings { Transport = "WiFi", Host = "127.0.0.1",
+                    OtaPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString() }, timeout.Token);
+                Check((await link.InfoAsync(timeout.Token))["serial"]?.GetValue<string>() == "port-test");
+                await serving.WaitAsync(timeout.Token);
+            }
+            finally { listener.Stop(); }
+        }));
         tests.Add(("BLE 桥释放后忽略迟到通知并允许重复释放", async () =>
         {
             var ble = new BleFake();

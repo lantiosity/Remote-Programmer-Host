@@ -30,6 +30,7 @@ public sealed record Settings
     public bool HexReceive { get; init; }
     public string OtaImage { get; init; } = "";
     public string OtaSerial { get; init; } = "";
+    public string OtaPort { get; init; } = "5557";
     public bool VerifyOnly { get; init; }
     public string Theme { get; init; } = "system";
 

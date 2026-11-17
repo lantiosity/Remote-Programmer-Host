@@ -99,7 +99,8 @@ public abstract class WiredOtaTransport : IOtaSession
             var tcp = new TcpClient { NoDelay = true };
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
             limit.CancelAfter(TimeSpan.FromSeconds(8));
-            try { await tcp.ConnectAsync(settings.Host, 5557, limit.Token); return new TcpOta(tcp); }
+            var port = (int)Validation.Number(settings.OtaPort, "OTA 端口", 1, 65535);
+            try { await tcp.ConnectAsync(settings.Host, port, limit.Token); return new TcpOta(tcp); }
             catch { tcp.Dispose(); throw; }
         }
         var expected = string.IsNullOrWhiteSpace(settings.OtaSerial) ? settings.UsbId : settings.OtaSerial;
