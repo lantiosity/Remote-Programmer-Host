@@ -14,3 +14,6 @@ portable/
 data/
 *.user
 *.log
+# Large generated portable downloads remain alongside tracked source/checksums.
+/release/*/*-win-x64.7z
+/release/*/*-win-x64.manifest.json
