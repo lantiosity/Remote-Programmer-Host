@@ -39,12 +39,14 @@ public abstract class WiredOtaTransport : IOtaSession
 
     public async Task<JsonObject> InfoAsync(CancellationToken ct)
     {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(TimeSpan.FromSeconds(20));
         using var bytes = new MemoryStream();
         while (bytes.Length <= 512)
         {
             var offset = new byte[2];
             BinaryPrimitives.WriteUInt16LittleEndian(offset, (ushort)bytes.Length);
-            var part = await ExchangeAsync(4, offset, ct);
+            var part = await ExchangeAsync(4, offset, limit.Token);
             if (part.Length > (Mtu == 63 ? 57 : 512) || bytes.Length + part.Length > 512)
                 throw new InvalidDataException("OTA 设备信息超出协议上限");
             bytes.Write(part);
@@ -75,11 +77,13 @@ public abstract class WiredOtaTransport : IOtaSession
     }
     public async Task<string> WifiReadAsync(CancellationToken ct)
     {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(TimeSpan.FromSeconds(20));
         using var bytes = new MemoryStream();
         while (bytes.Length < 512)
         {
             var offset = new byte[2]; BinaryPrimitives.WriteUInt16LittleEndian(offset, (ushort)bytes.Length);
-            var part = await ExchangeAsync(7, offset, ct);
+            var part = await ExchangeAsync(7, offset, limit.Token);
             if (part.Length > 57 || bytes.Length + part.Length > 512) throw new IOException("WiFi 配置响应超出协议上限");
             bytes.Write(part);
             if (part.Length < 57) return Encoding.UTF8.GetString(bytes.ToArray());
@@ -93,7 +97,9 @@ public abstract class WiredOtaTransport : IOtaSession
         {
             Validation.Link(settings);
             var tcp = new TcpClient { NoDelay = true };
-            try { await tcp.ConnectAsync(settings.Host, 5557, ct); return new TcpOta(tcp); }
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromSeconds(8));
+            try { await tcp.ConnectAsync(settings.Host, 5557, limit.Token); return new TcpOta(tcp); }
             catch { tcp.Dispose(); throw; }
         }
         var expected = string.IsNullOrWhiteSpace(settings.OtaSerial) ? settings.UsbId : settings.OtaSerial;
@@ -127,9 +133,14 @@ public abstract class WiredOtaTransport : IOtaSession
                 { var selected = transport; transport = null; return selected; }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception ex) when (ex is IOException or OperationCanceledException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.Text.Json.JsonException or TimeoutException)
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or OperationCanceledException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.Text.Json.JsonException or TimeoutException)
             { failures.Add(ex); }
-            finally { if (transport != null) await transport.DisposeAsync(); }
+            finally
+            {
+                if (transport != null)
+                    try { await transport.DisposeAsync(); }
+                    catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException) { failures.Add(ex); }
+            }
         }
         throw new IOException($"未找到指定 USB 设备（失败候选 {failures.Count} 个），请检查序列号、占用及固件支持。",
             failures.Count == 0 ? null : new AggregateException(failures));
@@ -196,7 +207,7 @@ public abstract class WiredOtaTransport : IOtaSession
             var bytes = await reports.Reader.ReadAsync(token);
             if (Volatile.Read(ref receiveFailure) is Exception failedRead) throw new IOException("USB 接收失败", failedRead);
             if (bytes.Length != 65 || bytes[1] != 0x80 || bytes[2] != kind || bytes[3] > 57)
-                throw new InvalidDataException("USB OTA 响应无效，请先通过 ROM USB 安装 1.2.0 固件");
+                throw new InvalidDataException("USB OTA 响应无效，请检查设备连接及固件是否支持此接口");
             var error = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(4));
             if (error != 0) throw new IOException($"OTA 请求被拒绝：0x{error:X8}");
             return bytes.AsSpan(8, bytes[3]).ToArray();

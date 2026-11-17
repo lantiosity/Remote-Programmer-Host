@@ -5,6 +5,13 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("BLE DAP 通知溢出明确报告且停止当前桥", async () =>
+        {
+            var ble = new BleFake(); var errors = new List<string>();
+            await using var bridge = await BleDapBridge.StartAsync(ble, CancellationToken.None, errors.Add);
+            for (var i = 0; i < 520; i++) ble.Receive!(new byte[] { 1 });
+            Check(bridge.Failure is IOException && errors.Count == 1 && errors[0].Contains("溢出"));
+        }));
         tests.Add(("配置优先完整主文件并从中断的临时文件恢复", () =>
         {
             var folder = Path.Combine(Path.GetTempPath(), "wirelink-settings-" + Guid.NewGuid().ToString("N"));
