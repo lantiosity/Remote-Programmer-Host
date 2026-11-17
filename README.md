@@ -1,4 +1,4 @@
-# WireLink 上位机 0.2.1
+# WireLink 上位机 0.2.2
 
 C# / .NET 8 WinForms + WebView2 远程烧录工作台。支持 USB、WiFi、BLE、目标串口、芯片选择、固件升级及 USB/BLE 配网。固件在独立仓库维护，本仓库不依赖其源码目录。
 
@@ -36,10 +36,13 @@ python tools/prepare-assets.py
 ```powershell
 dotnet run --project WireLink.Tests -c Release
 node --test tests/*.test.cjs
+python -B tests/test_remote.py
 ```
 
 C# 测试需要 pyOCD 解释器，可设置 `WIRELINK_PYTHON`。普通测试不会连接或写入硬件；硬件测试必须显式传入参数。
 
-当前发行目录为 `release/0.2.1/`，包含源码 ZIP 和可直接使用的 `WireLink-0.2.1-win-x64.7z`。便携包需完整解压后双击 EXE，包含运行依赖及语言资源，不携带个人设置和固件镜像；校验值与文件清单位于同目录。大型便携包及其生成清单不进入 Git，源码、源码 ZIP、版本说明和压缩包校验值纳入版本管理。`release/0.2.0/` 保留旧版，不覆盖既有归档。版本统一在 `Directory.Build.props` 设置。
+当前发行目录为 `release/0.2.2/`，包含源码 ZIP 和可直接使用的 `WireLink-0.2.2-win-x64.7z`。便携包需完整解压后双击 EXE，包含运行依赖及语言资源，不携带个人设置和固件镜像；校验值与文件清单位于同目录。大型便携包及其生成清单不进入 Git，源码、源码 ZIP、版本说明和压缩包校验值纳入版本管理。既有发行目录保留，不覆盖旧包。版本统一在 `Directory.Build.props` 设置。
+
+0.2.2 配合固件 0.1.1 使用：WiFi/BLE remote 大块内存和 AP 请求由上位机分块，BLE OTA 在写入前请求 Windows 配对并强制加密；WiFi OTA 端口可配置，通过 USB/BLE 读取设备信息时可同步实际端口。窗口状态只表示设备存在授权窗口，无线操作请长按 BOOT 开放对应链路；USB 授权不开放无线。不改变固件报文或放宽固件校验，APv2 等能力仍以固件为准。BLE 实机配对与 OTA 仍需硬件验收。
 
 0.2.1 的审阅项处理、验证边界和后续实机项目见 `docs/REPAIR_PLAN_0.2.1.md`。Windows CI 执行无硬件构建与回归；真实设备测试不自动执行。
