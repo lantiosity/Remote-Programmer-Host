@@ -11,8 +11,14 @@ public sealed class OtaTransport(BleConnection connection) : IOtaSession
 {
     public int Mtu => connection.Mtu;
     public ValueTask DisposeAsync() => connection.DisposeAsync();
-    public async Task<JsonObject> InfoAsync(CancellationToken ct) =>
-        JsonNode.Parse(Encoding.UTF8.GetString(await connection.ReadAsync("24", ct)))!.AsObject();
+    public async Task<JsonObject> InfoAsync(CancellationToken ct)
+    {
+        // A short status read starts ATT/MTU negotiation before reading long JSON.
+        await connection.ReadAsync("23", ct);
+        for (var attempt = 0; connection.Mtu < 40 && attempt < 20; attempt++) await Task.Delay(100, ct);
+        try { return JsonNode.Parse(Encoding.UTF8.GetString(await connection.ReadAsync("24", ct)))!.AsObject(); }
+        catch (System.Text.Json.JsonException ex) { throw new IOException("蓝牙设备信息不完整，MTU 或长读尚未就绪，请重新连接。", ex); }
+    }
     public async Task<OtaStatus> StatusAsync(CancellationToken ct) => OtaStatus.Parse(await connection.ReadAsync("23", ct));
     public Task ControlAsync(byte[] data, CancellationToken ct) => connection.WriteAsync("21", data, true, ct);
     public Task DataAsync(byte[] data, CancellationToken ct) => connection.WriteAsync("22", data, true, ct);

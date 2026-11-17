@@ -11,7 +11,7 @@ namespace WireLink.App.Services;
 
 public sealed record BleDevice(string Name, string Address, short Rssi, ulong NumericAddress);
 
-public sealed class BleConnection : IAsyncDisposable
+public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
 {
     public static Guid Uuid(string id) => Guid.Parse($"6e4000{id}-b5a3-f393-e0a9-e50e24dcca9e");
     public BluetoothLEDevice Device { get; }
@@ -35,19 +35,18 @@ public sealed class BleConnection : IAsyncDisposable
         watcher.Received += (_, args) =>
         {
             var name = args.Advertisement.LocalName;
-            if (name.Contains("ESP-SWD", StringComparison.OrdinalIgnoreCase) || args.Advertisement.ServiceUuids.Contains(Uuid("10"))
-                || devices.ContainsKey(args.BluetoothAddress))
+            if (args.BluetoothAddress != 0)
             {
                 if (string.IsNullOrEmpty(name) && devices.TryGetValue(args.BluetoothAddress, out var previous)) name = previous.Name;
                 devices[args.BluetoothAddress] = new(name, FormatAddress(args.BluetoothAddress), args.RawSignalStrengthInDBm, args.BluetoothAddress);
             }
         };
-        watcher.Stopped += (_, args) => { if (args.Error != BluetoothError.Success) failure = new IOException($"蓝牙扫描失败：{args.Error}"); };
+        watcher.Stopped += (_, args) => { if (args.Error != BluetoothError.Success) Interlocked.CompareExchange(ref failure, new IOException($"蓝牙扫描失败：{args.Error}"), null); };
         try
         {
             watcher.Start();
             await Task.Delay(duration, ct);
-            if (failure != null) throw failure;
+            if (Volatile.Read(ref failure) is Exception error) throw error;
             return devices.Values.OrderByDescending(d => d.Rssi).ToArray();
         }
         finally { watcher.Stop(); }
@@ -63,7 +62,7 @@ public sealed class BleConnection : IAsyncDisposable
             return address;
         }
         var devices = await ScanAsync(TimeSpan.FromSeconds(6), ct);
-        var matches = devices.Where(d => d.Name == s.BleName).ToArray();
+        var matches = devices.Where(d => string.Equals(d.Name, s.BleName, StringComparison.OrdinalIgnoreCase)).ToArray();
         return matches.Length switch
         {
             0 => throw new IOException($"未发现蓝牙设备 {s.BleName}，请确认已上电"),
@@ -150,11 +149,11 @@ public sealed class BleConnection : IAsyncDisposable
             GattClientCharacteristicConfigurationDescriptorValue.Notify).AsTask(ct));
     }
 
-    public async Task WriteChunksAsync(string id, byte[] data, CancellationToken ct)
+    public async Task WriteChunksAsync(string id, byte[] data, CancellationToken ct, bool response = false)
     {
         var chunk = Math.Clamp(Mtu - 3, 20, 244);
         for (var offset = 0; offset < data.Length; offset += chunk)
-            await WriteAsync(id, data.AsSpan(offset, Math.Min(chunk, data.Length - offset)).ToArray(), false, ct);
+            await WriteAsync(id, data.AsSpan(offset, Math.Min(chunk, data.Length - offset)).ToArray(), response, ct);
     }
 
     public async ValueTask DisposeAsync()
