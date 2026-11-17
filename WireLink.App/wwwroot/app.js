@@ -2,8 +2,8 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { settings: {}, busy: false, action: '', serial: 'closed', rx: 0, tx: 0, started: 0, logCount: 0 };
-const pending = new Map();
-let requestNumber = 0;
+const requests = window.WireLinkRequests.create({ send: message => window.chrome.webview.postMessage(message) });
+let checkingHost = false;
 let saveTimer, toastTimer;
 let decoder = new TextDecoder('utf-8');
 let terminalText = '';
@@ -36,11 +36,7 @@ function request(action, extra = {}) {
     toast('请从 WireLink Windows 程序启动此界面。');
     return Promise.reject(new Error('WebView2 host unavailable'));
   }
-  const id = String(++requestNumber);
-  return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    window.chrome.webview.postMessage({ id, action, settings: snapshot(), ...extra });
-  });
+  return requests.request(action, { settings: snapshot(), ...extra });
 }
 
 function run(action, extra) { return request(action, extra).catch(error => toast(error.message)); }
@@ -90,6 +86,11 @@ function showFilename() {
 }
 
 function lockControls() {
+  if (state.hostLost) {
+    $$('button,input,select').forEach(element => element.disabled = true);
+    $('#phase').textContent = '宿主未响应，任务状态未知，正在等待恢复连接…';
+    return;
+  }
   $$('#page-wifi input, #page-wifi select, #wifi-refresh-ports').forEach(input => input.disabled = state.busy);
   $('#wifi-use-ip').disabled = state.busy || !$('#wifi-use-ip').dataset.address;
   pickers.setBusy(state.busy && state.action !== 'targets');
@@ -210,17 +211,25 @@ function data(kind, value) {
 }
 
 function onMessage(message) {
+  if (!window.WireLinkRequests.valid(message)) { log('已忽略格式无效的宿主消息。'); return; }
+  try { handleMessage(message); } catch { toast('收到无效设备数据，已忽略；可重试读取。'); }
+}
+function handleMessage(message) {
   switch (message.type) {
     case 'init': populate(message.settings); lockControls();
       $$('[data-app-version]').forEach(element => element.textContent = message.version);
       if (!message.engineReady) { $('#footer-hint').textContent = 'pyOCD 尚未安装：请运行安装上位机依赖.cmd'; toast('缺少 pyOCD 引擎。串口和 BLE OTA 可独立使用。'); }
       presentWhenPainted();
       break;
-    case 'response': {
-      const callback = pending.get(message.id);
-      if (!callback) break;
-      pending.delete(message.id);
-      if (message.ok) callback.resolve(); else callback.reject(new Error(message.error));
+    case 'response': requests.receive(message); break;
+    case 'hostState': {
+      if (state.hostLost) {
+        state.hostLost = false;
+        $$('button,input,select').forEach(element => element.disabled = false);
+        state.busy = message.busy; state.serial = message.serial; state.action = message.action || '';
+        $('#phase').textContent = state.busy ? '宿主连接已恢复，任务仍在执行' : '宿主连接已恢复';
+        lockControls();
+      }
       break;
     }
     case 'error': toast(message.text); break;
@@ -332,5 +341,17 @@ $('#close-picker').addEventListener('click', () => $('#ble-picker').close());
 setInterval(() => { if (state.busy) $('#elapsed').textContent = ((Date.now() - state.started) / 1000).toFixed(1) + ' s'; }, 100);
 const pickers = window.WireLinkPickers.create({ getSettings: () => state.settings, setSetting,
   loadTargets: silent => request(silent ? 'targetsBackground' : 'targets'), onError: toast });
-if (window.chrome?.webview) { window.chrome.webview.addEventListener('message', event => onMessage(event.data)); run('ready'); }
+if (window.chrome?.webview) {
+  window.chrome.webview.addEventListener('message', event => onMessage(event.data)); run('ready');
+  setInterval(async () => {
+    if (checkingHost || !state.busy && state.serial !== 'opening' && !state.hostLost) return;
+    checkingHost = true;
+    try { await request('ping'); }
+    catch {
+      requests.rejectAll('宿主连接中断，任务状态未知。');
+      state.hostLost = true; lockControls();
+    } finally { checkingHost = false; }
+  }, 5000);
+  window.addEventListener('pagehide', () => requests.rejectAll('页面已关闭'));
+}
 else toast('请从 WireLink Windows 程序启动此界面。');

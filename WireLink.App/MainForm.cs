@@ -27,6 +27,7 @@ public sealed class MainForm : ChromeForm
     private Settings settings;
     private CancellationTokenSource? jobCancellation;
     private Task? operation;
+    private string activeAction = "";
     private Task? serialOpenOperation;
     private SerialService? serial;
     private bool serialOpening;
@@ -282,6 +283,10 @@ public sealed class MainForm : ChromeForm
                     Post(new { type = "data", kind = "wifi_ports", value = SerialPort.GetPortNames().OrderBy(x => x).ToArray() });
                     break;
                 case "cancel": jobCancellation?.Cancel(); break;
+                case "ping":
+                    Post(new { type = "hostState", busy = jobCancellation != null, action = activeAction,
+                        serial = serialOpening ? "opening" : serial != null ? "connected" : "closed" });
+                    break;
                 case "serialOpen": serialOpenOperation = OpenSerialAsync(value); await serialOpenOperation; break;
                 case "serialClose":
                     serialCancellation?.Cancel();
@@ -312,6 +317,7 @@ public sealed class MainForm : ChromeForm
                     if (!ConfirmAction(action, value)) break;
                     Persist(value);
                     jobCancellation = new();
+                    activeAction = action;
                     Post(new { type = "job", busy = true, action });
                     operation = RunJobAsync(action, value, jobCancellation.Token, wifi);
                     await operation;
@@ -415,6 +421,7 @@ public sealed class MainForm : ChromeForm
             var elapsed = Math.Round(clock.Elapsed.TotalSeconds, 1);
             Log((status == "success" ? "任务完成" : status == "cancelled" ? "任务已取消" : "任务失败") + $" · {elapsed:F1} 秒");
             jobCancellation?.Dispose(); jobCancellation = null;
+            activeAction = "";
             Post(new { type = "job", busy = false, action, status, elapsed });
         }
     }
