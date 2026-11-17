@@ -27,7 +27,7 @@
 | HS-09 | 目录按不区分大小写的 name 合并，外部包结果覆盖同 ID；去重测试通过。 |
 | HS-10 | 原代码已有 512 字节上限，报告所述无限循环不成立；进一步限制单页长度和整次读取 20 秒。满页假响应 9 次内终止测试通过。 |
 | HS-11 | USB 空闲 TimeoutException 继续读；其他 I/O 错误仍断开。具体 USB 驱动的空闲行为需实机验收。 |
-| HS-12 | 销毁前及派发执行前均检查状态；涵盖 InvalidOperationException（已含 ObjectDisposedException）与 ArgumentException；关闭时不再向 WebView 发消息。普通 UI 启动/关闭检查完成。 |
+| HS-12 | 销毁前及派发执行前均检查状态；涵盖 InvalidOperationException（已含 ObjectDisposedException）与 ArgumentException；关闭时不再向 WebView 发消息。普通 UI 启动/关闭检查完成，BLE 释放后的迟到通知与重复释放回归通过。 |
 | HS-13 | DAP 分块使用 WriteWithResponse；通知溢出记录明确错误并终止损坏会话，不静默丢弃。转发、带响应标志、溢出假链路测试通过；大块 BLE 实机传输待验。 |
 | HS-14 | 镜像只在 OTA 编排异步读取并校验，连接前完成；后台目录绑定窗口生命周期，关闭时取消并等待。 |
 | HS-15 | 前端先验证消息形状，渲染异常隔离；取消任意日志百分比匹配，仅明确 progress 事件更新进度（pyOCD 任务使用不定进度）。Node 非法消息测试通过。 |
@@ -39,7 +39,7 @@
 
 ## 验证记录
 
-- 本机无硬件 C# 回归 31/31，Node 回归 16/16；Release 自包含发布及资产校验、精简引擎冒烟通过。
+- 本机无硬件 C# 回归 32/32，Node 回归 16/16；Release 自包含发布及资产校验、精简引擎冒烟通过。
 - 已通过便携入口启动并观察到界面版本 0.2.1、后台目录 4074 个型号、多级菜单。启动计时本次 workbench_revealed 为 979 ms；这是单次本机测量，不能代表所有电脑。
 - 不改动、构建或烧写固件，不执行真实目标 flash/erase/OTA。物理 BLE/USB 验收与硬件压力测试保留为后续项目。
 - 发行包的 7z 完整性、逐文件解压比对、SHA256 和版本记录见 release/0.2.1/README.md。
