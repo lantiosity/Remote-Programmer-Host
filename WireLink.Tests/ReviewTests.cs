@@ -5,6 +5,26 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("串口并发发送与重复释放有界结束", async () =>
+        {
+            var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            try
+            {
+                var accepting = listener.AcceptTcpClientAsync();
+                var serial = new SerialService();
+                await serial.OpenAsync(new WireLink.Core.Settings { Transport = "WiFi", Host = "127.0.0.1",
+                    SerialPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString() }, CancellationToken.None);
+                using var peer = await accepting;
+                var sending = serial.SendAsync(new byte[4 * 1024 * 1024], CancellationToken.None);
+                var first = serial.DisposeAsync().AsTask(); var second = serial.DisposeAsync().AsTask();
+                await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+                try { await sending.WaitAsync(TimeSpan.FromSeconds(2)); }
+                catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException) { }
+                await serial.DisposeAsync();
+            }
+            finally { listener.Stop(); }
+        }));
         tests.Add(("BLE DAP 请求使用带响应写入并转发通知", async () =>
         {
             var ble = new BleFake();

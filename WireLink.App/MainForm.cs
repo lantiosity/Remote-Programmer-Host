@@ -3,7 +3,6 @@ using System.IO.Ports;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using WireLink.App.Services;
@@ -35,6 +34,8 @@ public sealed class MainForm : ChromeForm
     private bool closing, allowClose, ready;
     private bool runtimeSetupAttempted;
     private Task<JsonNode>? initialCatalog;
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly SemaphoreSlim serialLifecycle = new(1, 1);
     private string serialTransport = "";
     private readonly List<string> logs = [];
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
@@ -213,14 +214,16 @@ public sealed class MainForm : ChromeForm
 
     private void OnUi(Action action)
     {
-        if (IsDisposed || Disposing) return;
-        if (InvokeRequired) { try { BeginInvoke(action); } catch (InvalidOperationException) { } }
-        else action();
+        if (closing || IsDisposed || Disposing || !IsHandleCreated) return;
+        void Guarded() { if (!closing && !IsDisposed && !Disposing) action(); }
+        try { if (InvokeRequired) BeginInvoke((Action)Guarded); else Guarded(); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) { }
     }
 
     private void Post(object value) => OnUi(() =>
     {
-        if (ready && !web.IsDisposed) web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value, WebJson));
+        if (ready && !web.IsDisposed && web.CoreWebView2 != null)
+            web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value, WebJson));
     });
 
     private void Log(string text)
@@ -233,15 +236,13 @@ public sealed class MainForm : ChromeForm
             if (logs.Count > 2500) logs.RemoveRange(0, logs.Count - 2500);
         }
         Post(new { type = "log", text = line });
-        var match = Regex.Match(text, @"(\d+(?:\.\d+)?)%");
-        if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out var progress)) Post(new { type = "progress", value = progress });
     }
 
     private void Persist(Settings value)
     {
         settings = value;
-        try { settings.Save(configPath); } catch (IOException ex) { Log("配置保存失败：" + ex.Message); }
+        try { settings.Save(configPath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log("配置保存失败，请检查 data 目录写入权限：" + ex.Message); }
     }
 
     private async void MessageReceivedAsync(object? sender, CoreWebView2WebMessageReceivedEventArgs args)
@@ -269,7 +270,7 @@ public sealed class MainForm : ChromeForm
                     PresentWorkbench(data.TryGetProperty("source", out var source) ? source.GetString() ?? "unknown" : "unknown");
                     break;
                 case "targetsBackground":
-                    initialCatalog ??= new PyOcdService(root, _ => { }).CatalogAsync("targets", value, CancellationToken.None);
+                    initialCatalog ??= new PyOcdService(root, _ => { }).CatalogAsync("targets", value, lifetime.Token);
                     Post(new { type = "data", kind = "targets", value = await initialCatalog });
                     break;
                 case "save": Persist(value); break;
@@ -338,7 +339,7 @@ public sealed class MainForm : ChromeForm
     {
         if (action is "flash" or "erase" or "inspect" or "reset")
             PyOcdCommand.Build(value, action, value.Transport == "BLE" ? 1 : null);
-        if (action == "ota_update") FirmwareImage.Parse(File.ReadAllBytes(Validation.FilePath(value.OtaImage, ".bin")));
+        if (action == "ota_update") Validation.FilePath(value.OtaImage, ".bin");
     }
 
     private bool ConfirmAction(string action, Settings value)
@@ -435,8 +436,13 @@ public sealed class MainForm : ChromeForm
         var current = new SerialService();
         serial = current;
         current.Received = bytes => Post(new { type = "rx", hex = Convert.ToHexString(bytes) });
-        current.Disconnected = error => OnUi(() => _ = CloseSerialAsync(error));
+        current.Disconnected = error => OnUi(async () =>
+        {
+            try { await CloseSerialAsync(error, current); }
+            catch (Exception ex) { Log("串口释放失败：" + ex.Message); }
+        });
         Post(new { type = "serial", status = "opening", text = "正在连接…" });
+        await serialLifecycle.WaitAsync();
         try
         {
             var label = await current.OpenAsync(value, serialCancellation.Token);
@@ -447,22 +453,38 @@ public sealed class MainForm : ChromeForm
         }
         catch
         {
-            await CloseSerialAsync();
+            try { await current.DisposeAsync(); }
+            finally
+            {
+                serial = null;
+                serialCancellation?.Dispose(); serialCancellation = null;
+                Post(new { type = "serial", status = "closed", text = "串口连接失败" });
+            }
             throw;
         }
-        finally { serialOpening = false; }
+        finally { serialOpening = false; serialLifecycle.Release(); }
     }
 
-    private async Task CloseSerialAsync(string? error = null)
+    private async Task CloseSerialAsync(string? error = null, SerialService? expected = null)
     {
+        if (expected != null && !ReferenceEquals(serial, expected)) return;
         var current = serial;
-        serial = null;
         serialCancellation?.Cancel();
-        if (current != null) await current.DisposeAsync();
-        serialCancellation?.Dispose(); serialCancellation = null;
-        serialOpening = false;
-        Post(new { type = "serial", status = "closed", text = error ?? "串口已断开" });
-        if (error != null) Log(error);
+        await serialLifecycle.WaitAsync();
+        try
+        {
+            if (!ReferenceEquals(serial, current)) return;
+            try { if (current != null) await current.DisposeAsync(); }
+            finally
+            {
+                serial = null;
+                serialCancellation?.Dispose(); serialCancellation = null;
+                serialOpening = false;
+                Post(new { type = "serial", status = "closed", text = error ?? "串口已断开" });
+            }
+            if (error != null) Log(error);
+        }
+        finally { serialLifecycle.Release(); }
     }
 
     private void Browse(string key)
@@ -493,15 +515,17 @@ public sealed class MainForm : ChromeForm
         if ((jobCancellation != null || serial != null) && MessageBox.Show(this,
             "仍有活动任务或串口连接。退出将取消任务并释放连接。", "退出 WireLink", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
         closing = true;
+        lifetime.Cancel();
         Enabled = false;
         jobCancellation?.Cancel();
         serialCancellation?.Cancel();
         try
         {
             if (operation != null) await operation;
+            if (initialCatalog != null) { try { await initialCatalog; } catch { } }
             if (serialOpenOperation != null) { try { await serialOpenOperation; } catch { } }
             await CloseSerialAsync();
         }
-        finally { allowClose = true; Close(); }
+        finally { lifetime.Dispose(); allowClose = true; Close(); }
     }
 }

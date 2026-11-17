@@ -13,6 +13,8 @@ public sealed class SerialService : IAsyncDisposable
     private readonly CancellationTokenSource stop = new();
     private readonly SemaphoreSlim writing = new(1, 1);
     private Task? reading;
+    private readonly object disposalLock = new();
+    private Task? disposal;
     public Action<byte[]>? Received { get; set; }
     public Action<string?>? Disconnected { get; set; }
 
@@ -65,7 +67,9 @@ public sealed class SerialService : IAsyncDisposable
                 }
                 else
                 {
-                    var count = await stream!.ReadAsync(buffer, stop.Token);
+                    int count;
+                    try { count = await stream!.ReadAsync(buffer, stop.Token); }
+                    catch (TimeoutException) when (serial != null && !stop.IsCancellationRequested) { continue; }
                     if (count == 0) throw new IOException("设备已关闭串口连接");
                     Received?.Invoke(buffer.AsSpan(0, count).ToArray());
                 }
@@ -77,16 +81,23 @@ public sealed class SerialService : IAsyncDisposable
 
     public async Task SendAsync(byte[] data, CancellationToken ct)
     {
-        await writing.WaitAsync(ct);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, stop.Token);
+        await writing.WaitAsync(linked.Token);
         try
         {
-            if (ble != null) await ble.WriteChunksAsync("02", data, ct);
-            else await stream!.WriteAsync(data, ct);
+            linked.Token.ThrowIfCancellationRequested();
+            if (ble != null) await ble.WriteChunksAsync("02", data, linked.Token);
+            else await stream!.WriteAsync(data, linked.Token);
         }
         finally { writing.Release(); }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        lock (disposalLock) return new(disposal ??= DisposeCoreAsync());
+    }
+
+    private async Task DisposeCoreAsync()
     {
         stop.Cancel();
         // Close the handle to unblock SerialPort's Windows overlapped read.
@@ -94,8 +105,12 @@ public sealed class SerialService : IAsyncDisposable
         tcp?.Dispose();
         stream?.Dispose();
         if (reading != null) await reading;
-        if (ble != null) await ble.DisposeAsync();
-        serial?.Dispose();
-        stop.Dispose();
+        await writing.WaitAsync();
+        try
+        {
+            if (ble != null) await ble.DisposeAsync();
+            serial?.Dispose();
+        }
+        finally { writing.Release(); }
     }
 }
