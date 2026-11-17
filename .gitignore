@@ -17,3 +17,7 @@ data/
 # Large generated portable downloads remain alongside tracked source/checksums.
 /release/*/*-win-x64.7z
 /release/*/*-win-x64.manifest.json
+
+# Local cross-repository review notes and diagnostic harness
+/docs/COMPATIBILITY_FIRMWARE_0.1.1.md
+/tools/check-firmware-contract.py
