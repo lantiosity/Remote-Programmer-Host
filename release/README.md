@@ -4,6 +4,6 @@
 
 在项目根目录完成版本修改、构建验证并暂存源码后，执行 `python tools/archive-source.py 版本号`，再将该版本目录加入提交。脚本不会覆盖已存在的版本目录。归档不包含 `release/` 自身，避免嵌套历史包。
 
-当前版本为 `0.2.1/`。完成 `tools/Publish-Portable.ps1` 及源码归档后，执行 `python tools/archive-portable.py`，从 Directory.Build.props 读取版本并生成便携 7z、逐文件清单及校验码；会剔除 data 中的个人设置，验证 7z 完整性并解压逐文件比对。需要安装 7-Zip。脚本拒绝覆盖同版本便携包。
+当前版本为 `0.2.2/`。完成 `tools/Publish-Portable.ps1` 及源码归档后，执行 `python tools/archive-portable.py`，从 Directory.Build.props 读取版本并生成便携 7z、逐文件清单及校验码；会剔除 data 中的个人设置，验证 7z 完整性并解压逐文件比对。需要安装 7-Zip。脚本拒绝覆盖同版本便携包。
 
 源码 ZIP、版本说明及 SHA256 纳入 Git；大型便携 7z 与其生成清单保存在本地 release 目录，通过 .gitignore 排除，不向远端自动上传。旧版文件保留。
