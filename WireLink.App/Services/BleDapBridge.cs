@@ -13,6 +13,8 @@ public sealed class BleDapBridge : IAsyncDisposable
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource stop = new();
     private readonly Task loop;
+    private readonly object disposalLock = new();
+    private Task? disposal;
     private readonly Channel<byte[]> notifications = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(512)
         { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait });
     public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -32,6 +34,7 @@ public sealed class BleDapBridge : IAsyncDisposable
         {
             await connection.SubscribeAsync("12", data =>
             {
+                if (bridge.stop.IsCancellationRequested) return;
                 if (!bridge.notifications.Writer.TryWrite(data)) bridge.Fail(new IOException("BLE DAP 通知缓冲区溢出，连接已关闭以避免截断数据，请重新连接。"));
             }, ct);
             return bridge;
@@ -41,9 +44,10 @@ public sealed class BleDapBridge : IAsyncDisposable
 
     private void Fail(Exception error)
     {
+        if (stop.IsCancellationRequested) return;
         if (Interlocked.CompareExchange(ref failure, error, null) != null) return;
         report?.Invoke(error.Message);
-        stop.Cancel();
+        try { stop.Cancel(); } catch (ObjectDisposedException) { }
     }
 
     private async Task RunAsync()
@@ -59,8 +63,13 @@ public sealed class BleDapBridge : IAsyncDisposable
                 while (notifications.Reader.TryRead(out _)) { }
                 async Task ForwardNotifications()
                 {
-                    await foreach (var packet in notifications.Reader.ReadAllAsync(session.Token))
-                        await stream.WriteAsync(packet, session.Token);
+                    try
+                    {
+                        await foreach (var packet in notifications.Reader.ReadAllAsync(session.Token))
+                            await stream.WriteAsync(packet, session.Token);
+                    }
+                    catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+                    { Fail(new IOException("BLE DAP 通知转发失败：" + ex.Message, ex)); throw; }
                 }
                 var receive = ForwardNotifications();
                 try
@@ -84,7 +93,12 @@ public sealed class BleDapBridge : IAsyncDisposable
         { if (!stop.IsCancellationRequested) Fail(new IOException("BLE DAP 桥连接失败：" + ex.Message, ex)); }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        lock (disposalLock) return new(disposal ??= DisposeCoreAsync());
+    }
+
+    private async Task DisposeCoreAsync()
     {
         stop.Cancel();
         listener.Stop();

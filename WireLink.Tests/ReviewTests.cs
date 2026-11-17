@@ -5,6 +5,14 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("BLE 桥释放后忽略迟到通知并允许重复释放", async () =>
+        {
+            var ble = new BleFake();
+            var bridge = await BleDapBridge.StartAsync(ble, CancellationToken.None);
+            await Task.WhenAll(bridge.DisposeAsync().AsTask(), bridge.DisposeAsync().AsTask());
+            for (var i = 0; i < 600; i++) ble.Receive!(new byte[] { 1 });
+            Check(bridge.Failure == null);
+        }));
         tests.Add(("BLE DAP 通知溢出明确报告且停止当前桥", async () =>
         {
             var ble = new BleFake(); var errors = new List<string>();
