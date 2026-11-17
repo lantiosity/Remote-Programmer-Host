@@ -213,6 +213,7 @@ AsyncTest("USB 配网长命令正确分片且响应按偏移完整重组", async
     Check(transport.Offsets.SequenceEqual(Enumerable.Range(0, transport.Offsets.Count).Select(i => i*57)));
 });
 
+ReviewTests.Register(tests);
 var failures = 0;
 try
 {

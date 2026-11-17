@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json.Nodes;
 using WireLink.Core;
@@ -7,6 +8,11 @@ namespace WireLink.App.Services;
 
 public sealed class PyOcdService(string root, Action<string> log)
 {
+    internal static void TryTerminate(Process process)
+    {
+        try { if (!process.HasExited) process.Kill(true); }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException) { }
+    }
     public string Python => File.Exists(Path.Combine(AppContext.BaseDirectory, "engine", "python.exe"))
         ? Path.Combine(AppContext.BaseDirectory, "engine", "python.exe") : Environment.GetEnvironmentVariable("WIRELINK_PYTHON") ?? Path.Combine(root, ".venv-ble", "Scripts", "python.exe");
 
@@ -46,7 +52,7 @@ public sealed class PyOcdService(string root, Action<string> log)
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
         using var cancellation = linked.Token.Register(() =>
         {
-            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+            TryTerminate(process);
         });
         var output = new StringBuilder();
         async Task ReadAsync(StreamReader reader)
@@ -80,8 +86,9 @@ public sealed class PyOcdService(string root, Action<string> log)
         { throw new TimeoutException("pyOCD 操作超时，请检查设备连接"); }
         finally
         {
-            if (!process.HasExited) process.Kill(true);
-            await process.WaitForExitAsync();
+            TryTerminate(process);
+            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or Win32Exception) { }
         }
     }
 
@@ -100,7 +107,16 @@ public sealed class PyOcdService(string root, Action<string> log)
         var json = JsonNode.Parse(text[start..])!;
         if (json["status"]?.GetValue<int>() is not (null or 0)) throw new IOException(text);
         var result = json[kind == "probes" ? "boards" : "targets"]?.DeepClone() ?? new JsonArray();
-        if (bundled != null) foreach (var item in result.AsArray()) bundled.Add(item?.DeepClone());
-        return bundled ?? result;
+        return kind == "targets" ? MergeTargets(bundled, result.AsArray()) : result;
+    }
+
+    public static JsonArray MergeTargets(JsonArray? bundled, JsonArray current)
+    {
+        var entries = new Dictionary<string, JsonNode>(StringComparer.OrdinalIgnoreCase);
+        foreach (var list in new[] { bundled, current })
+            if (list != null) foreach (var item in list)
+                if (item?["name"] is JsonValue name && name.TryGetValue<string>(out var key) && !string.IsNullOrWhiteSpace(key))
+                    entries[key] = item.DeepClone();
+        return new JsonArray(entries.Values.ToArray());
     }
 }
