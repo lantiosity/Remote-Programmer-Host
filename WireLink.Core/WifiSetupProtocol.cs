@@ -34,7 +34,7 @@ public static class WifiSetupProtocol
         if (result["id"]?.GetValue<string>() != id || result["busy"]?.GetValue<bool>() == true) return null;
         if (result["ok"]?.GetValue<bool>() != true)
             throw new IOException(result["error"]?.GetValue<string>() switch {
-                "window_closed" => "请先长按烧录器 BOOT 约 2 秒，开放配置窗口，再保存或清除 WiFi。",
+                "window_closed" => "BLE 配置窗口未开放：请长按 BOOT 约 2 秒；USB 授权不能用于 BLE 配网。",
                 "device_busy" => "烧录器正忙，请等待升级或配置任务结束。",
                 "scan_failed" => "网络扫描失败，请稍后重试。",
                 "save_failed" => "WiFi 保存失败，请检查网络名称和密码。",

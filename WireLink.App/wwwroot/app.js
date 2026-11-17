@@ -204,7 +204,9 @@ function data(kind, value) {
     $('#ota-version').textContent = info.version || '—';
     $('#ota-slot').textContent = info.running || '—';
     $('#ota-image-state').textContent = info.image_state === 2 ? 'VALID · 已确认' : String(info.image_state ?? '—');
-    $('#ota-window').textContent = value.status ? (value.status.flags & 1 ? '升级窗口已开放' : '升级窗口已关闭') : '新固件启动已确认';
+    $('#ota-window').textContent = value.status ? (value.status.flags & 1 ? '存在授权窗口 · 无线链路请长按 BOOT 确认' : '升级窗口已关闭') : '新固件启动已确认';
+    if (state.settings.transport !== 'WiFi' && Number.isInteger(info.ota_port) && info.ota_port >= 1 && info.ota_port <= 65535)
+      setSetting('ota_port', String(info.ota_port));
     if (info.serial && !state.settings.ota_serial) setSetting('ota_serial', info.serial);
     log(JSON.stringify(value, null, 2));
   }

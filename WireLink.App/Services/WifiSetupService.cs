@@ -87,7 +87,7 @@ public static class WifiSetupService
             {
                 var status = await Query("status");
                 if (request.Link == "BLE" && status["armed"]?.GetValue<bool>() != true)
-                    throw new IOException("请先长按烧录器 BOOT 约 2 秒，开放配置窗口，再保存或清除 WiFi。");
+                    throw new IOException("请先长按烧录器 BOOT 约 2 秒，开放 BLE 配置窗口；USB 授权不能用于 BLE 配网。");
             }
             var result = await Query(request.Operation);
             if (request.Operation == "scan")

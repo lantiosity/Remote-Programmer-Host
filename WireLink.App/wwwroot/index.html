@@ -87,9 +87,10 @@
 
       <section class="page hidden" id="page-ota">
         <div class="page-heading"><div><div class="eyebrow">KEEP YOUR PROGRAMMER UP TO DATE</div><h1>烧录器固件升级<span class="heading-dot">.</span></h1><p>通过 USB、WiFi 或蓝牙，更新 ESP32-S3 自身应用。</p></div><span class="chip-badge">OTA <span>USB / WIFI / BLE</span></span></div>
-        <div class="notice"><span>i</span><p>在设备正常运行时长按 <b>BOOT 约 2 秒</b>，或通过控制台执行 <code>ota arm</code> 开放升级窗口。<br>使用左侧选中的链路与设备配置。USB 升级自动开放窗口；WiFi 使用 TCP 5557。升级前请停止其他调试与串口连接。</p></div>
+        <div class="notice"><span>i</span><p>无线升级前，在设备正常运行时长按 <b>BOOT 约 2 秒</b>，或在控制台执行 <code>ota arm 300 wifi</code> / <code>ota arm 300 ble</code> 开放对应链路。USB 自动授权仅用于 USB。<br>BLE OTA 要求加密连接，首次升级将请求 Windows 配对；若未完成，请到系统蓝牙设置配对后重试。升级前停止其他调试与串口连接。</p></div>
         <div class="card"><div class="card-title"><span class="step">01</span><h2>ESP32 应用镜像</h2><span class="format-tags">esp_swdlink.bin</span></div>
           <label>固件路径<div class="file-input"><input data-setting="ota_image" placeholder="选择 firmware/build/esp_swdlink.bin"><button data-browse="ota_image">选择文件</button></div></label>
+          <label data-link="WiFi" class="hidden">OTA TCP 端口<input data-setting="ota_port" inputmode="numeric" placeholder="5557" aria-label="OTA TCP 端口"><span class="hint">与固件 OTA 端口一致；通过 USB 或 BLE 读取设备信息可同步此端口。</span></label>
           <div class="two-col ota-options"><label>设备序列号校验 <span class="optional">建议填写</span><input data-setting="ota_serial" placeholder="例如 ESP-SWD-3EC7C8"></label><label class="checkbox"><input type="checkbox" data-setting="verify_only"><span>仅传输校验，不切换启动分区</span></label></div>
           <div class="action-bar"><button class="button primary" data-action="ota_update">↑ 开始升级…</button><button class="button" data-action="ota_info">读取设备状态</button></div>
         </div>
