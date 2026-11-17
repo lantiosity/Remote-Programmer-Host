@@ -5,6 +5,24 @@ internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
+        tests.Add(("配置优先完整主文件并从中断的临时文件恢复", () =>
+        {
+            var folder = Path.Combine(Path.GetTempPath(), "wirelink-settings-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            try
+            {
+                var path = Path.Combine(folder, "settings.json");
+                new WireLink.Core.Settings { Theme = "dark" }.Save(path);
+                File.WriteAllText(path + ".tmp", "broken");
+                Check(WireLink.Core.Settings.Load(path).Theme == "dark" && !File.Exists(path + ".tmp"));
+                File.Move(path, path + ".tmp");
+                File.WriteAllText(path, "broken");
+                Check(WireLink.Core.Settings.Load(path).Theme == "dark" && !File.Exists(path + ".tmp"));
+                Check(WireLink.Core.Settings.Load(path).Theme == "dark");
+            }
+            finally { Directory.Delete(folder, true); }
+            return Task.CompletedTask;
+        }));
         tests.Add(("UART 配网过滤回显、残帧和旧请求并重组分片", () =>
         {
             var parser = new WireLink.Core.WifiConsoleParser();

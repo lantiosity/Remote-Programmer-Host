@@ -42,14 +42,35 @@ public sealed record Settings
 
     public static Settings Load(string path)
     {
-        try { return JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), Json) ?? new(); }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return new(); }
+        Settings? Read(string file)
+        {
+            try { return JsonSerializer.Deserialize<Settings>(File.ReadAllText(file), Json); }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return null; }
+        }
+        var current = Read(path);
+        if (current != null)
+        {
+            try { File.Delete(path + ".tmp"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            return current;
+        }
+        var recovered = Read(path + ".tmp");
+        if (recovered == null) return new();
+        try { File.Move(path + ".tmp", path, true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return recovered;
     }
 
     public void Save(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(this, Json), Encoding.UTF8);
+        using (var stream = new FileStream(path + ".tmp", FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true);
+            writer.Write(JsonSerializer.Serialize(this, Json));
+            writer.Flush();
+            stream.Flush(flushToDisk: true);
+        }
         File.Move(path + ".tmp", path, true);
     }
 }
