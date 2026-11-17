@@ -7,6 +7,7 @@ import subprocess
 import sys
 import urllib.request
 import zipfile
+from asset_integrity import verify
 
 root = Path(__file__).resolve().parents[1]
 assets = root / 'assets'
@@ -18,15 +19,18 @@ def download(url, path, sha256=None):
         temporary = path.with_suffix(path.suffix + '.download')
         urllib.request.urlretrieve(url, temporary)
         temporary.replace(path)
-    if sha256 and hashlib.sha256(path.read_bytes()).hexdigest() != sha256:
-        raise RuntimeError(f'Checksum mismatch: {path}; remove this file and retry')
+    if sha256:
+        verify(path, sha256)
 
 for name in ['targets.json', 'target-packs.json', 'packs-manifest.json', 'PORTABLE-README.txt']:
     shutil.copy2(assets/name, cache/name)
 python = cache / 'python'
 python.mkdir(exist_ok=True)
+for item in json.loads((assets/'runtime-assets.json').read_text(encoding='utf-8')):
+    if Path(item['file']).name != item['file']:
+        raise ValueError('Invalid runtime filename')
+    download(item['download'], cache/item['file'], item['sha256'])
 archive = cache / 'python-3.14.2-embed-amd64.zip'
-download('https://www.python.org/ftp/python/3.14.2/python-3.14.2-embed-amd64.zip', archive)
 with zipfile.ZipFile(archive) as package:
     package.extractall(python)
 (python/'python314._pth').write_text('python314.zip\n.\nLib\nimport site\n', encoding='utf-8')
@@ -40,5 +44,4 @@ for item in json.loads((assets/'packs-manifest.json').read_text(encoding='utf-8'
     if Path(name).name != name:
         raise ValueError('Invalid pack filename')
     download(item['download'], packs/name, item['sha256'])
-download('https://go.microsoft.com/fwlink/p/?LinkId=2124703', cache/'MicrosoftEdgeWebview2Setup.exe')
 print('Assets ready. Publish-Portable.ps1 verifies the Microsoft installer signature.')
