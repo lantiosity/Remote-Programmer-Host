@@ -4,6 +4,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 using WireLink.Core;
 
@@ -115,6 +116,28 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
         if (status != GattCommunicationStatus.Success) throw new IOException($"蓝牙 GATT 操作失败：{status}");
     }
 
+    public async Task EnsureOtaEncryptionAsync(CancellationToken ct)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(TimeSpan.FromSeconds(60));
+        try
+        {
+            var pairing = Device.DeviceInformation.Pairing;
+            if (!pairing.IsPaired)
+            {
+                var result = await pairing.PairAsync(DevicePairingProtectionLevel.Encryption).AsTask(limit.Token);
+                if (result.Status is not (DevicePairingResultStatus.Paired or DevicePairingResultStatus.AlreadyPaired))
+                    throw new IOException($"蓝牙配对未完成（{result.Status}）。请在 Windows 蓝牙设置中配对烧录器后重试；OTA 要求加密连接。");
+            }
+            // Pairing alone does not prove that this connection is encrypted.
+            // Require encryption on the two writes so Windows negotiates it.
+            foreach (var id in new[] { "21", "22" })
+                (await CharacteristicAsync(id, limit.Token)).ProtectionLevel = GattProtectionLevel.EncryptionRequired;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { throw new TimeoutException("蓝牙配对或加密准备超时，请在 Windows 蓝牙设置中完成配对后重试。"); }
+    }
+
     private async Task<GattCharacteristic> CharacteristicAsync(string id, CancellationToken ct)
     {
         if (characteristics.TryGetValue(id, out var found)) return found;
@@ -136,6 +159,8 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
         var characteristic = await CharacteristicAsync(id, ct);
         var status = await characteristic.WriteValueAsync(data.AsBuffer(), response
             ? GattWriteOption.WriteWithResponse : GattWriteOption.WriteWithoutResponse).AsTask(ct);
+        if (status != GattCommunicationStatus.Success && id is "21" or "22")
+            throw new IOException($"BLE OTA 写入失败（{status}）：请确认 Windows 配对及加密连接已建立，并长按 BOOT 约 2 秒开放 BLE 升级窗口。");
         Ensure(status);
     }
 

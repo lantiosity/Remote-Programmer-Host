@@ -32,9 +32,21 @@ public sealed class OtaService(Action<string> phase, Action<double> progress, Ac
             Validation.FilePath(settings.OtaImage, ".bin"), ct)) : null;
         phase($"正在连接 {settings.Transport} 升级设备…");
         ulong? address = settings.Transport == "BLE" ? await BleConnection.ResolveAsync(settings, ct) : null;
-        async Task<IOtaSession> OpenAsync(CancellationToken token) => settings.Transport == "BLE"
-            ? new OtaTransport(await BleConnection.ConnectAsync(address!.Value, "20", token))
-            : await WiredOtaTransport.OpenAsync(settings, token);
+        async Task<IOtaSession> OpenAsync(CancellationToken token)
+        {
+            if (settings.Transport != "BLE") return await WiredOtaTransport.OpenAsync(settings, token);
+            var connection = await BleConnection.ConnectAsync(address!.Value, "20", token);
+            try
+            {
+                if (update)
+                {
+                    phase("正在准备 BLE OTA 加密连接，首次使用请完成 Windows 配对…");
+                    await connection.EnsureOtaEncryptionAsync(token);
+                }
+                return new OtaTransport(connection);
+            }
+            catch { await connection.DisposeAsync(); throw; }
+        }
         string previousSlot;
         await using (var transport = await OpenAsync(ct))
         {
