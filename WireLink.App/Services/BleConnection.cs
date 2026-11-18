@@ -14,6 +14,9 @@ public sealed record BleDevice(string Name, string Address, short Rssi, ulong Nu
 
 public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
 {
+    private const string SerialRxId = "02";
+    private const byte AttInsufficientResources = 0x11;
+
     public static Guid Uuid(string id) => Guid.Parse($"6e4000{id}-b5a3-f393-e0a9-e50e24dcca9e");
     public BluetoothLEDevice Device { get; }
     private readonly GattDeviceService service;
@@ -157,6 +160,15 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
     public async Task WriteAsync(string id, byte[] data, bool response, CancellationToken ct)
     {
         var characteristic = await CharacteristicAsync(id, ct);
+        if (id == SerialRxId && response)
+        {
+            var result = await characteristic.WriteValueWithResultAsync(
+                data.AsBuffer(), GattWriteOption.WriteWithResponse).AsTask(ct);
+            if (result.Status == GattCommunicationStatus.ProtocolError && result.ProtocolError == AttInsufficientResources)
+                throw new IOException("BLE 串口发送队列已满，当前分片未入队。");
+            Ensure(result.Status);
+            return;
+        }
         var status = await characteristic.WriteValueAsync(data.AsBuffer(), response
             ? GattWriteOption.WriteWithResponse : GattWriteOption.WriteWithoutResponse).AsTask(ct);
         if (status != GattCommunicationStatus.Success && id is "21" or "22")
@@ -179,6 +191,13 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
         var chunk = Math.Clamp(Mtu - 3, 20, 244);
         for (var offset = 0; offset < data.Length; offset += chunk)
             await WriteAsync(id, data.AsSpan(offset, Math.Min(chunk, data.Length - offset)).ToArray(), response, ct);
+    }
+
+    public async Task WriteSerialAsync(byte[] data, CancellationToken ct)
+    {
+        var characteristic = await CharacteristicAsync(SerialRxId, ct);
+        var responds = (characteristic.CharacteristicProperties & GattCharacteristicProperties.Write) != 0;
+        await WriteChunksAsync(SerialRxId, data, ct, response: responds);
     }
 
     public async ValueTask DisposeAsync()

@@ -86,7 +86,7 @@ public sealed class SerialService : IAsyncDisposable
         try
         {
             linked.Token.ThrowIfCancellationRequested();
-            if (ble != null) await ble.WriteChunksAsync("02", data, linked.Token);
+            if (ble != null) await ble.WriteSerialAsync(data, linked.Token);
             else await stream!.WriteAsync(data, linked.Token);
         }
         finally { writing.Release(); }
