@@ -47,23 +47,25 @@ public sealed class OtaService(Action<string> phase, Action<double> progress, Ac
             }
             catch { await connection.DisposeAsync(); throw; }
         }
-        string previousSlot;
+        string previousSlot, deviceSerial;
         await using (var transport = await OpenAsync(ct))
         {
             var current = await transport.InfoAsync(ct);
-            if (!string.IsNullOrWhiteSpace(settings.OtaSerial) && current["serial"]?.GetValue<string>() != settings.OtaSerial)
-                throw new ArgumentException("设备序列号不符，已停止操作");
+            deviceSerial = OtaUpdater.ValidateDevice(current, settings.OtaSerial);
             var status = await transport.StatusAsync(ct);
             info(new JsonObject { ["info"] = current.DeepClone(), ["status"] = System.Text.Json.JsonSerializer.SerializeToNode(status, Settings.Json) });
             if (!update) return;
-            previousSlot = current["running"]!.GetValue<string>();
+            if (current["running"] is not JsonValue slot || !slot.TryGetValue<string>(out var runningSlot)
+                || string.IsNullOrWhiteSpace(runningSlot))
+                throw new InvalidDataException("设备未报告有效的运行分区");
+            previousSlot = runningSlot;
             // Attribute discovery/read triggers MTU negotiation; wait briefly if needed.
             for (var attempt = 0; transport.Mtu < 40 && attempt < 20; attempt++) await Task.Delay(100, ct);
             // Physical USB access is a local authorization channel.
             if (transport is WiredOtaTransport wired && settings.Transport == "USB") await wired.ArmAsync(ct);
             phase("正在传输 ESP32 应用镜像…");
             var updater = new OtaUpdater(transport);
-            await updater.UpdateAsync(image!, settings.OtaSerial, settings.VerifyOnly, progress, ct);
+            await updater.UpdateAsync(image!, deviceSerial, settings.VerifyOnly, progress, ct);
         }
         if (settings.VerifyOnly) { phase("镜像校验完成，启动分区未切换"); return; }
         phase("传输完成，正在等待新固件重启和启动确认…");
@@ -71,23 +73,32 @@ public sealed class OtaService(Action<string> phase, Action<double> progress, Ac
         while (clock.Elapsed.TotalSeconds < 60)
         {
             await Task.Delay(1200, ct);
+            JsonObject current;
             try
             {
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 attempt.CancelAfter(TimeSpan.FromSeconds(10));
                 await using var transport = await OpenAsync(attempt.Token);
-                var current = await transport.InfoAsync(attempt.Token);
-                if (current["elf_sha256"]?.GetValue<string>() == image!.ElfSha256
-                    && current["running"]?.GetValue<string>() != previousSlot
-                    && current["running"]?.GetValue<string>() == current["boot"]?.GetValue<string>()
-                    && current["image_state"]?.GetValue<int>() == 2)
-                {
-                    info(new JsonObject { ["info"] = current.DeepClone() });
-                    phase("新固件启动确认通过，分区和 ELF SHA256 已核对");
-                    return;
-                }
+                current = await transport.InfoAsync(attempt.Token);
             }
-            catch (Exception) when (!ct.IsCancellationRequested) { /* Device is rebooting; reconnect. */ }
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is
+                (IOException or System.Net.Sockets.SocketException or TimeoutException or OperationCanceledException
+                or InvalidOperationException or System.Text.Json.JsonException or System.Runtime.InteropServices.COMException))
+            {
+                continue; // The device may still be rebooting.
+            }
+
+            OtaUpdater.ValidateDevice(current, deviceSerial);
+            var running = current["running"]?.GetValue<string>();
+            if (current["elf_sha256"]?.GetValue<string>() == image!.ElfSha256
+                && !string.IsNullOrWhiteSpace(running) && running != previousSlot
+                && running == current["boot"]?.GetValue<string>()
+                && current["image_state"]?.GetValue<int>() == 2)
+            {
+                info(new JsonObject { ["info"] = current.DeepClone() });
+                phase("新固件启动确认通过，分区和 ELF SHA256 已核对");
+                return;
+            }
         }
         throw new TimeoutException("未能确认新固件启动，请重新读取设备状态；传输完成不等于启动成功");
     }

@@ -93,13 +93,13 @@ public abstract class WiredOtaTransport : IOtaSession
 
     public static async Task<WiredOtaTransport> OpenAsync(Settings settings, CancellationToken ct)
     {
+        Validation.Link(settings);
         if (settings.Transport == "WiFi")
         {
-            Validation.Link(settings);
+            var port = (int)Validation.Number(settings.OtaPort, "OTA 端口", 1, 65535);
             var tcp = new TcpClient { NoDelay = true };
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
             limit.CancelAfter(TimeSpan.FromSeconds(8));
-            var port = (int)Validation.Number(settings.OtaPort, "OTA 端口", 1, 65535);
             try { await tcp.ConnectAsync(settings.Host, port, limit.Token); return new TcpOta(tcp); }
             catch { tcp.Dispose(); throw; }
         }

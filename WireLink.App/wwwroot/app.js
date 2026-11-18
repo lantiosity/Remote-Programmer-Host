@@ -171,7 +171,11 @@ function data(kind, value) {
   } else if (kind === 'probes') {
     const ids = value.map(item => item.unique_id);
     catalog('probes', ids);
-    if (!ids.includes(state.settings.usb_id)) setSetting('usb_id', ids[0] || '');
+    const selected = $('[data-setting="usb_id"]').value.trim();
+    if (selected && !ids.includes(selected)) {
+      setSetting('usb_id', '');
+      toast(ids.length ? '原 USB 探针已不在扫描结果中，请重新选择。' : '原 USB 探针未找到，请重新连接后扫描。');
+    }
     log(ids.length ? `USB 探针：${ids.join(', ')}` : '没有发现 USB 探针，请检查原生 USB 口和数据线。');
   } else if (kind === 'targets') {
     pickers.updateTargets(value);

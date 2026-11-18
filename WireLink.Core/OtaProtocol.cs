@@ -46,6 +46,18 @@ public sealed class OtaUpdater(IOtaTransport link)
     public bool OwnsTransfer { get; private set; }
     public bool Activated { get; private set; }
 
+    public static string ValidateDevice(JsonObject info, string? expectedSerial)
+    {
+        if (info["protocol"] is not JsonValue protocol || !protocol.TryGetValue<int>(out var version) || version != 1
+            || info["project"] is not JsonValue project || !project.TryGetValue<string>(out var name) || name != "esp_swdlink")
+            throw new InvalidDataException("设备 OTA 项目或协议不匹配");
+        if (info["serial"] is not JsonValue serial || !serial.TryGetValue<string>(out var value) || string.IsNullOrWhiteSpace(value))
+            throw new InvalidDataException("设备未报告有效的 OTA 序列号");
+        if (!string.IsNullOrWhiteSpace(expectedSerial) && !string.Equals(value, expectedSerial, StringComparison.Ordinal))
+            throw new ArgumentException($"设备序列号不符（预期 {expectedSerial}，实际 {value}），已停止操作");
+        return value;
+    }
+
     private async Task<OtaStatus> WaitAsync(Func<OtaStatus, bool> predicate, CancellationToken ct, int seconds = 15)
     {
         var clock = Stopwatch.StartNew();
@@ -63,12 +75,10 @@ public sealed class OtaUpdater(IOtaTransport link)
         Action<double> progress, CancellationToken ct)
     {
         var info = await link.InfoAsync(ct);
-        if (!string.IsNullOrWhiteSpace(expectedSerial) && info["serial"]?.GetValue<string>() != expectedSerial)
-            throw new ArgumentException("设备序列号不符，已停止升级");
-        if (info["protocol"]?.GetValue<int>() != 1 || info["project"]?.GetValue<string>() != "esp_swdlink")
-            throw new InvalidDataException("设备 OTA 项目或协议不匹配");
+        ValidateDevice(info, expectedSerial);
         var status = await link.StatusAsync(ct);
-        if ((status.Flags & 2) != 0 || status.State is >= 2 and <= 6) throw new InvalidOperationException("其他 OTA 会话正在进行");
+        if ((status.Flags & 2) != 0 || status.State is >= 2 and <= 6)
+            throw new InvalidOperationException("设备正在升级或等待重启，请稍后重试");
         if ((status.Flags & 1) == 0) throw new InvalidOperationException("升级窗口未开放：请长按 BOOT 约 2 秒或执行 ota arm");
         if (image.Bytes.Length > info["slot_size"]!.GetValue<int>()) throw new ArgumentException("镜像超过 OTA 分区大小");
         if (link.Mtu < 40) throw new IOException($"BLE MTU {link.Mtu} 太小，OTA 要求至少 40");

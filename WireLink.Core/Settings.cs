@@ -105,7 +105,6 @@ public static class Validation
         {
             if (string.IsNullOrWhiteSpace(s.Host) || Regex.IsMatch(s.Host, @"[\s/:]"))
                 throw new ArgumentException("请输入设备 IPv4 地址或主机名，端口单独填写");
-            Number(s.DapPort, "DAP 端口", 1, 65535);
         }
         if (s.Transport == "BLE" && string.IsNullOrWhiteSpace(s.BleName) && string.IsNullOrWhiteSpace(s.BleAddress))
             throw new ArgumentException("请填写蓝牙设备名称或地址");

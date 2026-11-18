@@ -1,11 +1,16 @@
+using System.Buffers.Binary;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Text.Json.Nodes;
 using WireLink.App.Services;
+using WireLink.Core;
 
 internal static class ReviewTests
 {
     public static void Register(List<(string Name, Func<Task> Run)> tests)
     {
-        tests.Add(("OTA 使用配置的 TCP 端口并解析设备信息", async () =>
+        tests.Add(("DAP 端口无效时 OTA 仍使用自己的 TCP 端口", async () =>
         {
             var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
             listener.Start();
@@ -29,12 +34,22 @@ internal static class ReviewTests
                 });
                 using var timeout = new CancellationTokenSource(5000);
                 await using var link = await WiredOtaTransport.OpenAsync(new WireLink.Core.Settings { Transport = "WiFi", Host = "127.0.0.1",
-                    OtaPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString() }, timeout.Token);
+                    DapPort = "", OtaPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString() }, timeout.Token);
                 Check((await link.InfoAsync(timeout.Token))["serial"]?.GetValue<string>() == "port-test");
                 await serving.WaitAsync(timeout.Token);
             }
             finally { listener.Stop(); }
         }));
+        tests.Add(("OTA 重连拒绝其他设备（填写序列号）", () =>
+            TestOtaReconnect("DEVICE-A", "DEVICE-B", "esp_swdlink", 1, "设备序列号不符")));
+        tests.Add(("OTA 重连拒绝其他设备（序列号留空）", () =>
+            TestOtaReconnect("", "DEVICE-B", "esp_swdlink", 1, "设备序列号不符")));
+        tests.Add(("OTA 重连拒绝其他项目", () =>
+            TestOtaReconnect("", "DEVICE-A", "other", 1, "项目或协议不匹配")));
+        tests.Add(("OTA 重连拒绝不兼容协议", () =>
+            TestOtaReconnect("", "DEVICE-A", "esp_swdlink", 2, "项目或协议不匹配")));
+        tests.Add(("OTA 重连确认同一设备已启动新镜像", () =>
+            TestOtaReconnect("", "DEVICE-A", "esp_swdlink", 1, null)));
         tests.Add(("BLE 桥释放后忽略迟到通知并允许重复释放", async () =>
         {
             var ble = new BleFake();
@@ -88,7 +103,7 @@ internal static class ReviewTests
                 var accepting = listener.AcceptTcpClientAsync();
                 var serial = new SerialService();
                 await serial.OpenAsync(new WireLink.Core.Settings { Transport = "WiFi", Host = "127.0.0.1",
-                    SerialPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString() }, CancellationToken.None);
+                    DapPort = "invalid", SerialPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString() }, CancellationToken.None);
                 using var peer = await accepting;
                 var sending = serial.SendAsync(new byte[4 * 1024 * 1024], CancellationToken.None);
                 var first = serial.DisposeAsync().AsTask(); var second = serial.DisposeAsync().AsTask();
@@ -159,6 +174,85 @@ internal static class ReviewTests
             Check((await service.RunAsync(["-c", "print('done')"], CancellationToken.None, true)).Trim() == "done");
         }));
     }
+    private static async Task TestOtaReconnect(string expectedSerial, string returningSerial, string project,
+        int protocol, string? expectedError)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var ct = timeout.Token;
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var path = Path.Combine(Path.GetTempPath(), $"wirelink-test-{Guid.NewGuid():N}.bin");
+        var imageBytes = FakeOta.Image();
+        var device = new FakeOta { Serial = "DEVICE-A" };
+        var confirmed = false;
+        try
+        {
+            await File.WriteAllBytesAsync(path, imageBytes, ct);
+            var service = new OtaService(_ => { }, _ => { }, details => confirmed |= details["status"] is null);
+            var update = service.RunAsync(new Settings
+            {
+                Transport = "WiFi", Host = "127.0.0.1", DapPort = "", OtaSerial = expectedSerial,
+                OtaImage = path, OtaPort = ((IPEndPoint)listener.LocalEndpoint).Port.ToString()
+            }, true, ct);
+            using (var peer = await listener.AcceptTcpClientAsync(ct))
+            {
+                var initial = await device.InfoAsync(ct);
+                initial["running"] = "ota_0";
+                while (device.State != 6) await ReplyToOtaRequest(peer.GetStream(), device, initial, ct);
+            }
+            using (var peer = await listener.AcceptTcpClientAsync(ct))
+            {
+                var rebooted = await device.InfoAsync(ct);
+                rebooted["serial"] = returningSerial;
+                rebooted["project"] = project;
+                rebooted["protocol"] = protocol;
+                rebooted["elf_sha256"] = FirmwareImage.Parse(imageBytes).ElfSha256;
+                rebooted["running"] = "ota_1";
+                rebooted["boot"] = "ota_1";
+                rebooted["image_state"] = 2;
+                await ReplyToOtaRequest(peer.GetStream(), device, rebooted, ct);
+            }
+            try { await update.WaitAsync(ct); }
+            catch (Exception ex) when (expectedError != null && ex.Message.Contains(expectedError, StringComparison.Ordinal))
+            {
+                Check(!confirmed);
+                return;
+            }
+            Check(expectedError == null && confirmed);
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static async Task ReplyToOtaRequest(NetworkStream stream, FakeOta device, JsonObject info, CancellationToken ct)
+    {
+        var header = new byte[8];
+        await stream.ReadExactlyAsync(header, ct);
+        Check(Encoding.ASCII.GetString(header, 0, 4) == "WLO1");
+        var request = new byte[BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(6))];
+        await stream.ReadExactlyAsync(request, ct);
+        byte[] reply;
+        if (header[4] == 4)
+        {
+            reply = Encoding.UTF8.GetBytes(info.ToJsonString());
+        }
+        else
+        {
+            if (header[4] == 1) await device.ControlAsync(request, ct);
+            if (header[4] == 2) await device.DataAsync(request, ct);
+            Check(header[4] is 1 or 2 or 3);
+            var status = await device.StatusAsync(ct);
+            reply = new byte[20] { 1, status.State, status.Op, status.Flags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+            BinaryPrimitives.WriteUInt32LittleEndian(reply.AsSpan(4), status.Received);
+            BinaryPrimitives.WriteUInt32LittleEndian(reply.AsSpan(8), status.Total);
+            BinaryPrimitives.WriteUInt32LittleEndian(reply.AsSpan(16), status.Session);
+        }
+        header[4] |= 0x80;
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(6), (ushort)(reply.Length + 4));
+        await stream.WriteAsync(header, ct);
+        await stream.WriteAsync(new byte[4], ct);
+        await stream.WriteAsync(reply, ct);
+    }
+
     private static void Check(bool condition) { if (!condition) throw new Exception("Review regression assertion failed"); }
     private sealed class UsbFake : WiredOtaTransport
     {
