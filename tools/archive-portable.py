@@ -2,6 +2,7 @@
 
 Run after archive-source.py. Requires 7-Zip; does not publish to any server.
 """
+import argparse
 import hashlib
 import json
 import os
@@ -12,6 +13,9 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--publish-dir', type=Path, default=root / 'publish', help='Path to the verified portable build')
+publish = parser.parse_args().publish_dir.resolve()
 version = ET.parse(root / 'Directory.Build.props').findtext('.//Version')
 if not version or any(c not in '0123456789.' for c in version):
     raise ValueError('Invalid host version')
@@ -26,7 +30,6 @@ if archive.exists() or manifest_path.exists():
 sevenzip = shutil.which('7z') or str(Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / '7-Zip' / '7z.exe')
 if not Path(sevenzip).is_file():
     raise FileNotFoundError('Install 7-Zip before packaging')
-publish = root / 'publish'
 if {p.name for p in publish.iterdir()} != {'WireLink.exe', '使用说明.txt', 'app', 'data'}:
     raise RuntimeError('Unexpected publish root entries')
 if (publish / 'app' / 'firmware').exists():
