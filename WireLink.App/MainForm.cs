@@ -32,6 +32,7 @@ public sealed class MainForm : ChromeForm
     private bool serialOpening;
     private CancellationTokenSource? serialCancellation;
     private bool closing, allowClose, ready;
+    private bool confirming;
     private bool runtimeSetupAttempted;
     private Task<JsonNode>? initialCatalog;
     private readonly CancellationTokenSource lifetime = new();
@@ -288,7 +289,9 @@ public sealed class MainForm : ChromeForm
                     Post(new { type = "hostState", busy = jobCancellation != null, action = activeAction,
                         serial = serialOpening ? "opening" : serial != null ? "connected" : "closed" });
                     break;
-                case "serialOpen": serialOpenOperation = OpenSerialAsync(value); await serialOpenOperation; break;
+                case "serialOpen":
+                    if (confirming) throw new InvalidOperationException("请先处理当前确认弹窗");
+                    serialOpenOperation = OpenSerialAsync(value); await serialOpenOperation; break;
                 case "serialClose":
                     serialCancellation?.Cancel();
                     if (serialOpening && serialOpenOperation != null) { try { await serialOpenOperation; } catch { } }
@@ -303,6 +306,7 @@ public sealed class MainForm : ChromeForm
                 case "probes": case "targets": case "scan": case "ports":
                 case "wifi_status": case "wifi_scan": case "wifi_save": case "wifi_clear":
                 case "flash": case "erase": case "inspect": case "reset": case "ota_info": case "ota_update":
+                    if (confirming) throw new InvalidOperationException("请先处理当前确认弹窗");
                     if (jobCancellation != null) throw new InvalidOperationException("已有任务正在运行");
                     if (serialOpening || serial != null && (action.StartsWith("wifi_") || action.StartsWith("ota_") || serialTransport == "BLE" || value.Transport == "BLE"))
                         throw new InvalidOperationException("请先关闭串口，再进行蓝牙操作或设备升级");
@@ -315,7 +319,7 @@ public sealed class MainForm : ChromeForm
                             data.TryGetProperty("password", out var password) ? password.GetString() ?? "" : "");
                         WifiSetupProtocol.Command("00000000", wifi.Operation, wifi.Ssid, wifi.Password);
                     }
-                    if (!ConfirmAction(action, value)) break;
+                    if (GetConfirmation(action, value) is { } prompt && !await ConfirmAsync(prompt)) break;
                     Persist(value);
                     jobCancellation = new();
                     activeAction = action;
@@ -342,19 +346,46 @@ public sealed class MainForm : ChromeForm
         if (action == "ota_update") Validation.FilePath(value.OtaImage, ".bin");
     }
 
-    private bool ConfirmAction(string action, Settings value)
+    private static ConfirmationPrompt? GetConfirmation(string action, Settings value)
     {
-        string? text = action switch
+        return action switch
         {
-            "wifi_save" => "将保存 WiFi 配置并重启烧录器。继续？",
-            "wifi_clear" => "将清除 WiFi 配置并重启烧录器，仅保留设备热点。继续？",
-            "erase" => $"目标 {value.Target} 的全部 Flash 将被擦除。继续？",
-            "flash" when value.EraseMode == "chip" => $"烧录前将整片擦除目标 {value.Target}。继续？",
-            "ota_update" => $"链路：{value.Transport}；设备：{(value.Transport == "USB" ? value.UsbId : value.Transport == "WiFi" ? value.Host : string.IsNullOrWhiteSpace(value.BleAddress) ? value.BleName : value.BleAddress)}\n"
-                + (value.VerifyOnly ? "将传输并校验 ESP32 应用，不切换启动分区。" : "升级 ESP32 自身固件，完成后重启并暂时断开 USB / 网络。") + "\n继续？",
+            "wifi_save" => new("保存 WiFi 配置", "保存后烧录器将重启，当前连接会暂时断开。", "保存并重启"),
+            "wifi_clear" => new("清除 WiFi 配置", "烧录器将清除已保存的 WiFi 配置并重启，仅保留设备热点。", "清除并重启", true),
+            "erase" => new("整片擦除", $"目标 {value.Target} 的全部 Flash 将被擦除。", "确认擦除", true),
+            "flash" when value.EraseMode == "chip" => new("整片擦除并烧录", $"烧录前将整片擦除目标 {value.Target}，其中原有的 Flash 数据会被清除。", "擦除并烧录", true),
+            "ota_update" => OtaConfirmation(value),
             _ => null
         };
-        return text == null || MessageBox.Show(this, text, "确认操作", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK;
+    }
+
+    private static ConfirmationPrompt OtaConfirmation(Settings value)
+    {
+        var endpoint = value.Transport switch
+        {
+            "USB" => string.IsNullOrWhiteSpace(value.OtaSerial) ? value.UsbId : value.OtaSerial,
+            "WiFi" => $"{value.Host}:{value.OtaPort}",
+            _ => string.IsNullOrWhiteSpace(value.BleAddress) ? value.BleName : value.BleAddress
+        };
+        if (string.IsNullOrWhiteSpace(endpoint)) endpoint = "自动识别已连接的烧录器";
+        var device = $"链路：{value.Transport}\n设备：{endpoint}\n\n";
+        return value.VerifyOnly
+            ? new("校验固件镜像", device + "将传输并校验 ESP32 应用，不切换启动分区。", "开始校验")
+            : new("升级烧录器固件", device + "升级完成后烧录器将重启，当前连接会暂时断开。", "开始升级");
+    }
+
+    private async Task<bool> ConfirmAsync(ConfirmationPrompt prompt)
+    {
+        confirming = true;
+        try
+        {
+            // Let the WebView event return before ShowDialog enters its modal message loop.
+            await Task.Yield();
+            if (IsDisposed) return false;
+            using var dialog = new ConfirmationDialog(prompt, dark);
+            return dialog.ShowDialog(this) == DialogResult.OK;
+        }
+        finally { confirming = false; }
     }
 
     private async Task RunJobAsync(string action, Settings value, CancellationToken ct, WifiSetupRequest? wifi = null)
@@ -511,9 +542,9 @@ public sealed class MainForm : ChromeForm
     {
         if (allowClose) return;
         args.Cancel = true;
-        if (closing) return;
-        if ((jobCancellation != null || serial != null) && MessageBox.Show(this,
-            "仍有活动任务或串口连接。退出将取消任务并释放连接。", "退出 WireLink", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+        if (closing || confirming) return;
+        if ((jobCancellation != null || serial != null) && !await ConfirmAsync(new(
+            "退出 WireLink", "退出会取消正在运行的任务，并关闭打开的串口连接。", "确认退出"))) return;
         closing = true;
         lifetime.Cancel();
         Enabled = false;
