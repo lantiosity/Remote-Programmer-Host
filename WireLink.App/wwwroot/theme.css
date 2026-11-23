@@ -42,6 +42,40 @@ html[data-custom-theme] .notice b { color: var(--ui-accent-ink); }
 html[data-custom-theme] .notice code { background: var(--ui-surface); color: inherit; }
 html[data-custom-theme] .notice > span { border-color: var(--ui-accent-ink); }
 
+html[data-wallpaper] main { position: relative; isolation: isolate; }
+html[data-wallpaper] main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--ui-wallpaper) center / cover no-repeat;
+  opacity: calc(var(--ui-wallpaper-opacity) * .68);
+}
+
+html[data-frosted] {
+  --glass-base: #ffffff;
+  --glass-panel: #ffffffb8;
+  --glass-glow: #dcefeb;
+}
+html[data-theme="dark"][data-frosted] {
+  --glass-base: #192433;
+  --glass-panel: #192433b8;
+  --glass-glow: #173936;
+}
+html[data-frosted]:not([data-wallpaper]) main {
+  background: radial-gradient(ellipse at top right, var(--glass-glow), transparent 65%);
+}
+@supports (backdrop-filter: blur(1px)) {
+  html[data-frosted] main > header,
+  html[data-frosted] .workspace .card {
+    background: var(--glass-panel);
+    background: color-mix(in srgb, var(--ui-glass-surface, var(--glass-base)) 74%, transparent);
+    backdrop-filter: blur(1rem) saturate(1.12);
+  }
+}
+html[data-custom-theme] { --ui-glass-surface: var(--ui-surface); }
+
 #theme-dialog {
   min-width: 0;
   width: min(28rem, calc(100% - 2rem));
@@ -70,6 +104,26 @@ html[data-custom-theme] .notice > span { border-color: var(--ui-accent-ink); }
 }
 
 .theme-colors output { font-family: var(--mono); text-align: end; }
+.theme-range, .theme-image-row {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.theme-range input[type="range"] {
+  padding: 0;
+  height: 1.75rem;
+  margin: 0;
+  accent-color: var(--theme-control-focus, var(--primary));
+  background: transparent;
+  border: 0;
+}
+.theme-range output { font-family: var(--mono); text-align: end; }
+.theme-image-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: .75rem; }
+.theme-image-row small { display: block; color: var(--muted); margin-top: .2rem; }
+.theme-frosted { margin-top: .75rem; }
 .theme-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
 #theme-reset { margin-inline-end: auto; }
 #theme-error { margin: .75rem 0 0; color: var(--ink); }

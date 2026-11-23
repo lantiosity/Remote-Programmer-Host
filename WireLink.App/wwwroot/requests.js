@@ -5,7 +5,7 @@
     function request(action, extra = {}) {
       const id = String(++sequence);
       const timeout = ['ota_update', 'flash', 'erase'].includes(action) ? 3600000 :
-        ['browse', 'export', 'offline_import', 'offline_export', 'offline_remove'].includes(action) ? 600000 : action === 'wifi_scan' ? 120000 :
+        ['browse', 'export', 'offline_import', 'offline_export', 'offline_remove', 'theme_pick_image'].includes(action) ? 600000 : action === 'wifi_scan' ? 120000 :
         action.startsWith('wifi_') || action === 'targetsBackground' || action === 'targets' || action === 'ota_info' ? 90000 : 30000;
       return new Promise((resolve, reject) => {
         const timer = setTimer(() => { pending.delete(id); reject(new Error('上位机响应超时，任务状态可能尚未更新，请检查连接。')); }, timeout);
@@ -31,6 +31,7 @@
     if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
     switch (message.type) {
       case 'themeEditor': return true;
+      case 'themeImage': return typeof message.image === 'string' && /^[0-9a-f]{32}$/.test(message.image);
       case 'response': return typeof message.id === 'string' && typeof message.ok === 'boolean';
       case 'rx': case 'tx': return typeof message.hex === 'string' && message.hex.length <= 1000000 && /^(?:[0-9a-fA-F]{2})*$/.test(message.hex);
       case 'progress': return Number.isFinite(message.value);

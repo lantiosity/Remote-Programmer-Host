@@ -12,21 +12,30 @@ const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 const themeEditor = $('#theme-dialog');
 const themeInputs = $$('[data-theme-color]');
 let themeDraft = null;
+let appearanceDraft = window.WireLinkTheme.appearance();
 let themeSaving = false;
+let themePicking = false;
+let themePreviewTimer;
 
-function applyTheme(theme, notify = true, colors = state.settings.custom_theme ?? null) {
+function applyTheme(theme, notify = true, colors = state.settings.custom_theme ?? null, effects = state.settings.theme_appearance) {
   theme = window.WireLinkTheme.mode(theme);
-  const dark = window.WireLinkTheme.apply(theme, colors);
+  const appearance = window.WireLinkTheme.appearance(effects);
+  const dark = window.WireLinkTheme.apply(theme, colors, appearance);
   $('#theme-icon').textContent = dark ? '☾' : '☀';
   try { localStorage.setItem('wirelink-theme', theme); } catch { }
-  if (notify && window.chrome?.webview) run('theme', { dark, colors });
+  if (notify && window.chrome?.webview) run('theme', { dark, colors, appearance });
 }
+function previewTheme(notify = true) { applyTheme(state.settings.theme, notify, themeDraft, appearanceDraft); }
 systemTheme.addEventListener('change', () => {
   if (state.settings.theme !== 'system') return;
-  applyTheme('system', true, themeEditor.open ? themeDraft : state.settings.custom_theme ?? null);
-  if (themeEditor.open) showThemeInputs();
+  if (themeEditor.open) { previewTheme(); showThemeInputs(); }
+  else applyTheme('system');
 });
-try { applyTheme(window.__wirelinkSettings?.theme || localStorage.getItem('wirelink-theme') || 'system', false, window.__wirelinkSettings?.custom_theme ?? null); }
+try {
+  const startupTheme = window.__wirelinkSettings;
+  applyTheme(startupTheme?.theme || localStorage.getItem('wirelink-theme') || 'system', false,
+    startupTheme?.custom_theme ?? null, startupTheme?.theme_appearance);
+}
 catch { applyTheme('system', false); }
 
 function showThemeInputs() {
@@ -36,6 +45,19 @@ function showThemeInputs() {
     input.value = colors[key];
     $(`[data-theme-value="${key}"]`).textContent = input.value.toUpperCase();
   });
+  $('#theme-opacity').value = appearanceDraft.opacity;
+  $('#theme-opacity-value').textContent = `${appearanceDraft.opacity}%`;
+  $('#theme-image-opacity').value = appearanceDraft.image_opacity;
+  $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
+  $('#theme-frosted').checked = appearanceDraft.frosted;
+  $('#theme-image-state').textContent = appearanceDraft.image ? '已选择图片' : '未设置';
+  lockThemeControls();
+}
+
+function lockThemeControls() {
+  const locked = themeSaving || themePicking || state.hostLost;
+  $$('#theme-dialog button, #theme-dialog input').forEach(field => { field.disabled = !!locked; });
+  $('#theme-image-opacity').disabled = $('#theme-clear-image').disabled = !!locked || !appearanceDraft.image;
 }
 
 function setThemeError(text) {
@@ -48,6 +70,7 @@ function openThemeEditor() {
   if (state.hostLost || themeEditor.open || $('#ble-picker').open) return;
   pickers.close();
   themeDraft = window.WireLinkTheme.valid(state.settings.custom_theme);
+  appearanceDraft = window.WireLinkTheme.appearance(state.settings.theme_appearance);
   showThemeInputs();
   setThemeError('');
   themeEditor.showModal();
@@ -56,32 +79,69 @@ themeInputs.forEach(input => {
   input.addEventListener('input', () => {
     themeDraft = Object.fromEntries(themeInputs.map(field => [field.dataset.themeColor, field.value]));
     $(`[data-theme-value="${input.dataset.themeColor}"]`).textContent = input.value.toUpperCase();
-    applyTheme(state.settings.theme, false, themeDraft);
+    previewTheme(false);
   });
-  input.addEventListener('change', () => applyTheme(state.settings.theme, true, themeDraft));
+  input.addEventListener('change', () => previewTheme());
+});
+$('#theme-opacity').addEventListener('input', event => {
+  appearanceDraft.opacity = Number(event.target.value);
+  $('#theme-opacity-value').textContent = `${appearanceDraft.opacity}%`;
+  if (themePreviewTimer == null) themePreviewTimer = setTimeout(() => {
+    themePreviewTimer = null;
+    if (themeEditor.open) previewTheme();
+  }, 40);
+});
+$('#theme-image-opacity').addEventListener('input', event => {
+  appearanceDraft.image_opacity = Number(event.target.value);
+  $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
+  previewTheme(false);
+});
+$('#theme-frosted').addEventListener('change', event => {
+  appearanceDraft.frosted = event.target.checked;
+  previewTheme(false);
+});
+$('#theme-pick-image').addEventListener('click', async () => {
+  if (themePicking) return;
+  themePicking = true;
+  lockThemeControls();
+  setThemeError('');
+  try { await request('theme_pick_image'); }
+  catch (error) { setThemeError(error.message); }
+  finally { themePicking = false; lockThemeControls(); }
+});
+$('#theme-clear-image').addEventListener('click', () => {
+  appearanceDraft.image = null;
+  showThemeInputs();
+  previewTheme(false);
 });
 $('#theme-reset').addEventListener('click', () => {
   themeDraft = null;
+  appearanceDraft = window.WireLinkTheme.appearance();
   showThemeInputs();
-  applyTheme(state.settings.theme, true, null);
+  previewTheme();
 });
 $('#theme-cancel').addEventListener('click', () => themeEditor.close());
-themeEditor.addEventListener('cancel', event => { if (themeSaving) event.preventDefault(); });
-themeEditor.addEventListener('close', () => applyTheme(state.settings.theme));
+themeEditor.addEventListener('cancel', event => { if (themeSaving || themePicking) event.preventDefault(); });
+themeEditor.addEventListener('close', () => {
+  clearTimeout(themePreviewTimer);
+  themePreviewTimer = null;
+  applyTheme(state.settings.theme);
+  run('theme_discard');
+});
 $('#theme-save').addEventListener('click', async () => {
-  if (themeSaving) return;
+  if (themeSaving || themePicking) return;
   themeSaving = true;
-  const fields = [...themeInputs, $('#theme-save'), $('#theme-cancel'), $('#theme-reset')];
-  fields.forEach(field => { field.disabled = true; });
+  lockThemeControls();
   setThemeError('');
   try {
-    await request('theme_save', { colors: themeDraft, dark: window.WireLinkTheme.isDark(state.settings.theme) });
+    await request('theme_save', { colors: themeDraft, appearance: appearanceDraft, dark: window.WireLinkTheme.isDark(state.settings.theme) });
     state.settings.custom_theme = themeDraft;
+    state.settings.theme_appearance = appearanceDraft;
     themeEditor.close();
   } catch (error) { setThemeError(error.message); }
   finally {
     themeSaving = false;
-    fields.forEach(field => { field.disabled = !!state.hostLost; });
+    lockThemeControls();
   }
 });
 
@@ -294,6 +354,13 @@ function onMessage(message) {
 function handleMessage(message) {
   switch (message.type) {
     case 'themeEditor': openThemeEditor(); break;
+    case 'themeImage':
+      if (themeEditor.open && themePicking) {
+        appearanceDraft.image = message.image;
+        showThemeInputs();
+        previewTheme(false);
+      }
+      break;
     case 'init': populate(message.settings); lockControls();
       $$('[data-app-version]').forEach(element => element.textContent = message.version);
       if (!message.engineReady) { $('#footer-hint').textContent = 'pyOCD 尚未安装：请运行安装上位机依赖.cmd'; toast('缺少 pyOCD 引擎。串口和 BLE OTA 可独立使用。'); }

@@ -28,11 +28,25 @@
   }
   const defaults = dark => bases[dark ? 'dark' : 'light'];
   const isDark = value => mode(value) === 'dark' || mode(value) === 'system' && matchMedia('(prefers-color-scheme: dark)').matches;
-  function apply(value, custom) {
+  const imageId = value => typeof value === 'string' && /^[0-9a-f]{32}$/.test(value);
+  function appearance(value) {
+    const clamp = (number, minimum, fallback) => Number.isInteger(number) ? Math.max(minimum, Math.min(100, number)) : fallback;
+    return { opacity: clamp(value?.opacity, 50, 100), image_opacity: clamp(value?.image_opacity, 0, 45),
+      image: imageId(value?.image) ? value.image : null, frosted: value?.frosted === true };
+  }
+
+  function apply(value, custom, effects) {
     const dark = isDark(value);
     const root = document.documentElement;
     root.dataset.theme = dark ? 'dark' : 'light';
     root.style.colorScheme = dark ? 'dark' : 'light';
+    const wallpaper = appearance(effects);
+    root.toggleAttribute('data-wallpaper', wallpaper.image !== null);
+    root.toggleAttribute('data-frosted', wallpaper.frosted);
+    if (wallpaper.image) {
+      root.style.setProperty('--ui-wallpaper', `url("https://wirelink-theme.example/${wallpaper.image}.png")`);
+      root.style.setProperty('--ui-wallpaper-opacity', String(wallpaper.image_opacity / 100));
+    }
     const colors = valid(custom);
     root.toggleAttribute('data-custom-theme', colors !== null);
     if (!colors) return dark;
@@ -60,9 +74,9 @@
     return dark;
   }
 
-  window.WireLinkTheme = { apply, defaults, fields, isDark, mode, valid };
+  window.WireLinkTheme = { apply, appearance, defaults, fields, isDark, mode, valid };
   const settings = window.__wirelinkSettings;
   let preference = settings?.theme;
   if (!preference) { try { preference = localStorage.getItem('wirelink-theme'); } catch { } }
-  apply(preference, settings?.custom_theme);
+  apply(preference, settings?.custom_theme, settings?.theme_appearance);
 })();
