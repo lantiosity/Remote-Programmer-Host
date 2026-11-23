@@ -151,16 +151,25 @@ function showThemeInputs() {
     $(`[data-theme-value="${key}"]`).textContent = input.value.toUpperCase();
   });
   for (const [key, input] of Object.entries(themeRanges)) {
-    input.value = appearanceDraft[key];
+    input.value = themeRangeValue(key, appearanceDraft[key]);
     showThemeRange(input);
   }
+  showControlTransparency();
   themeSwitches.forEach(input => { input.checked = appearanceDraft[input.dataset.themeSwitch]; });
   $('#theme-image-state').textContent = appearanceDraft.image ? '已选择图片' : '未设置';
   lockThemeControls();
 }
 
+// Keep persisted opacity values compatible with saved themes. The conversion works both ways.
+function themeRangeValue(key, percent) {
+  return key === 'control_transparency' ? percent : 100 - percent;
+}
+
 function showThemeRange(input) {
   $(`#${input.id}-value`).textContent = `${input.value}%`;
+}
+
+function showControlTransparency() {
   const control = window.WireLinkTheme.controlTransparency(appearanceDraft);
   $('#theme-control-result').textContent = `控件背景实际透明度 ${Math.round(control * 100) / 100}%`;
 }
@@ -206,8 +215,9 @@ themeInputs.forEach(input => {
   input.addEventListener('change', () => previewTheme());
 });
 for (const [key, input] of Object.entries(themeRanges)) input.addEventListener('input', () => {
-  appearanceDraft[key] = Number(input.value);
+  appearanceDraft[key] = themeRangeValue(key, Number(input.value));
   showThemeRange(input);
+  if (key === 'card_opacity' || key === 'control_transparency') showControlTransparency();
   previewTheme(false);
   if ((key === 'opacity' || key === 'sidebar_opacity') && themePreviewTimer == null)
     themePreviewTimer = setTimeout(() => {

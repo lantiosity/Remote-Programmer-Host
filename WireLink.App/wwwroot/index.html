@@ -195,16 +195,16 @@
   </dialog>
   <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description" data-scroll-area="主题设置">
     <div class="dialog-heading"><h2 id="theme-title">自定义主题</h2></div>
-    <p id="theme-description">更改会实时预览。不透明度只调背景底色，弹窗跟随窗口背景。</p>
+    <p id="theme-description">背景透明度实时预览，0% 为实色，100% 为全透。弹窗跟随窗口背景。</p>
     <div class="theme-colors">
       <label>强调色<input type="color" data-theme-color="accent" value="#087f80"><output data-theme-value="accent"></output></label>
       <label>工作区色调<input type="color" data-theme-color="background" value="#f5f7fb"><output data-theme-value="background"></output></label>
       <label>卡片色调<input type="color" data-theme-color="surface" value="#ffffff"><output data-theme-value="surface"></output></label>
     </div>
     <div class="theme-effects">
-      <label class="theme-range">窗口背景不透明度<input id="theme-opacity" type="range" min="0" max="100" value="100"><output id="theme-opacity-value">100%</output></label>
-      <label class="theme-range">侧边栏背景不透明度<input id="theme-sidebar-opacity" type="range" min="0" max="100" value="100"><output id="theme-sidebar-opacity-value">100%</output></label>
-      <label class="theme-range">卡片背景不透明度<input id="theme-card-opacity" type="range" min="0" max="100" value="88"><output id="theme-card-opacity-value">88%</output></label>
+      <label class="theme-range">窗口背景透明度<input id="theme-opacity" type="range" min="0" max="100" value="0"><output id="theme-opacity-value">0%</output></label>
+      <label class="theme-range">侧边栏背景透明度<input id="theme-sidebar-opacity" type="range" min="0" max="100" value="0"><output id="theme-sidebar-opacity-value">0%</output></label>
+      <label class="theme-range">卡片背景透明度<input id="theme-card-opacity" type="range" min="0" max="100" value="12"><output id="theme-card-opacity-value">12%</output></label>
       <label class="theme-range">控件相对透明度<input id="theme-control-transparency" type="range" min="0" max="100" value="0" aria-describedby="theme-control-result"><output id="theme-control-transparency-value">0%</output></label>
       <p id="theme-control-result" class="theme-effect-detail"></p>
       <div class="theme-image-row">
@@ -212,9 +212,9 @@
         <button type="button" id="theme-pick-image" class="button">选择图片…</button>
         <button type="button" id="theme-clear-image" class="text-button">移除</button>
       </div>
-      <label class="theme-range">图片强度<input id="theme-image-opacity" type="range" min="0" max="100" value="45"><output id="theme-image-opacity-value">45%</output></label>
-      <label class="theme-switch"><span>窗口亚克力</span><input type="checkbox" role="switch" data-theme-switch="window_acrylic"></label>
-      <label class="theme-switch"><span>未聚焦时保留窗口亚克力</span><input type="checkbox" role="switch" data-theme-switch="keep_acrylic_when_inactive"></label>
+      <label class="theme-range">背景图片透明度<input id="theme-image-opacity" type="range" min="0" max="100" value="55"><output id="theme-image-opacity-value">55%</output></label>
+      <label class="theme-switch"><span>窗口毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="window_acrylic"></label>
+      <label class="theme-switch"><span>失去焦点时保留窗口毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="keep_acrylic_when_inactive"></label>
       <label class="theme-switch"><span>侧边栏毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="sidebar_frosted"></label>
       <label class="theme-switch"><span>卡片毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="card_frosted"></label>
     </div>
