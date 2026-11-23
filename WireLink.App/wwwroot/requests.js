@@ -5,7 +5,7 @@
     function request(action, extra = {}) {
       const id = String(++sequence);
       const timeout = ['ota_update', 'flash', 'erase'].includes(action) ? 3600000 :
-        ['browse', 'export'].includes(action) ? 600000 : action === 'wifi_scan' ? 120000 :
+        ['browse', 'export', 'offline_import', 'offline_export', 'offline_remove'].includes(action) ? 600000 : action === 'wifi_scan' ? 120000 :
         action.startsWith('wifi_') || action === 'targetsBackground' || action === 'targets' || action === 'ota_info' ? 90000 : 30000;
       return new Promise((resolve, reject) => {
         const timer = setTimer(() => { pending.delete(id); reject(new Error('上位机响应超时，任务状态可能尚未更新，请检查连接。')); }, timeout);
@@ -47,6 +47,10 @@
         if (message.kind === 'probes') return Array.isArray(value) && value.every(x => x && typeof x.unique_id === 'string');
         if (message.kind === 'scan') return Array.isArray(value) && value.every(x => x && typeof x.name === 'string' && typeof x.address === 'string');
         if (message.kind === 'ota_info') return value && value.info && typeof value.info === 'object';
+        if (message.kind === 'offline_library') return value && typeof value.selected === 'string' &&
+          Array.isArray(value.items) && value.items.every(item => item && typeof item.name === 'string' &&
+            Number.isInteger(item.size) && Number.isInteger(item.address) && typeof item.reset === 'boolean' &&
+            (item.eraseEnd === null || Number.isInteger(item.eraseEnd)));
         if (message.kind === 'wifi_setup') return value && ['status','scan','save','clear'].includes(value.operation) &&
           (value.operation !== 'scan' || Array.isArray(value.networks) && value.networks.every(x => x && typeof x.ssid === 'string' && Number.isFinite(x.rssi)));
         return false;

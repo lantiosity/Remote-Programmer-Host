@@ -24,6 +24,7 @@
       <button class="nav-item" data-page="serial"><span class="nav-icon">⌘</span>串口监视器<span class="nav-count">02</span></button>
       <button class="nav-item" data-page="ota"><span class="nav-icon">↑</span>烧录器固件升级<span class="nav-count">03</span></button>
       <button class="nav-item" data-page="wifi"><span class="nav-icon">⌁</span>WiFi 配置<span class="nav-count">04</span></button>
+      <button class="nav-item" data-page="offline"><span class="nav-icon" aria-hidden="true">▤</span>离线烧录</button>
     </nav>
     <div class="divider"></div>
     <div class="section-label">通信链路 <span class="online-dot"></span></div>
@@ -62,7 +63,7 @@
             <div class="picker-field"><label for="frequency-input">SWD 时钟 <span class="optional">kHz</span></label><div class="picker-control"><input id="frequency-input" data-setting="frequency" inputmode="numeric" role="combobox" aria-expanded="false" aria-controls="frequency-menu" aria-autocomplete="none" autocomplete="off"><button id="frequency-toggle" class="picker-toggle" aria-label="选择 SWD 频率" aria-expanded="false" aria-controls="frequency-menu" type="button"></button></div></div>
             <label>连接模式<select data-setting="connect_mode"><option value="under-reset">Under reset · 复位下连接</option><option value="halt">Halt · 连接后暂停</option><option value="pre-reset">Pre reset · 连接前复位</option><option value="attach">Attach · 附加连接</option></select></label>
           </div>
-          <div class="file-row"><label>芯片支持包 <span class="optional">DFP .pack，可选</span><div class="file-input"><input data-setting="pack" placeholder="型号未内置时，选择厂商 CMSIS Device Family Pack"><button data-browse="pack" aria-label="选择芯片支持包">选择文件</button></div></label></div>
+          <div class="file-row"><label>芯片支持包 <span class="optional">DFP .pack，可选</span><div class="file-input"><input data-setting="pack" placeholder="导入厂商 DFP，自动保存到 data/dfp"><button data-browse="pack" aria-label="导入芯片支持包">导入 DFP</button></div></label></div>
         </div>
         <div class="card firmware-card"><div class="card-title"><span class="step">02</span><h2>选择固件</h2><span class="format-tags">BIN <i></i> HEX <i></i> ELF <i></i> AXF</span></div>
           <div class="firmware-picker"><div class="file-glyph">↥</div><div class="file-copy"><strong id="firmware-name">选择要烧录的目标固件</strong><span id="firmware-description">BIN 使用起始地址，HEX / ELF 使用文件内地址</span></div><button class="button" data-browse="image">浏览固件</button></div>
@@ -114,6 +115,28 @@
           <p id="wifi-result" class="hint" role="status">保存后请等待设备重启，再读取状态查看分配到的 IP 地址。</p>
           <div class="action-bar"><button class="button primary" data-action="wifi_save">保存并重启</button><button class="text-button danger" data-action="wifi_clear">清除 WiFi 并重启…</button></div>
         </div>
+      </section>
+      <section class="page hidden" id="page-offline">
+        <div class="page-heading"><div><h1>离线烧录<span class="heading-dot">.</span></h1><p>管理 STM32H743VI（2 MiB）镜像，并导出到 FAT32 microSD。</p></div></div>
+        <div class="card">
+          <div class="card-title"><h2>本地镜像库</h2><button class="text-button" data-offline="offline_list" type="button">刷新列表</button></div>
+          <label>目标芯片镜像 <span class="optional">BIN 文件</span>
+            <div class="file-input"><select id="offline-images"><option value="">暂无镜像</option></select><button data-offline="offline_import" type="button">导入镜像</button></div>
+          </label>
+          <p class="hint" id="offline-image-detail">导入的镜像保存在 data/offline。</p>
+          <div class="two-col ota-options">
+            <label>面板起始地址<input id="offline-address" class="mono" value="0x08000000" spellcheck="false"></label>
+            <label class="checkbox"><input id="offline-reset" type="checkbox"><span>完成后复位运行</span></label>
+          </div>
+          <p class="hint" id="offline-range">选择镜像后可查看擦除范围。</p>
+          <div class="action-bar">
+            <button class="button primary" data-offline="offline_export" type="button">导出到 microSD</button>
+            <button class="button" data-offline="offline_preset" type="button">保存面板参数</button>
+            <button class="text-button danger" data-offline="offline_remove" type="button">移除本地镜像…</button>
+          </div>
+          <p class="hint" id="offline-result" role="status"></p>
+        </div>
+        <div class="notice"><span aria-hidden="true">i</span><p>参数保存在电脑上。插卡后在烧录器面板打开「存储卡镜像」，选择对应文件并按这里的地址、复位选项设置。需要脱卡使用时，在面板选择「保存到板载」。</p></div>
       </section>
       <section class="activity-panel">
         <div class="task-line"><div><span class="task-dot" id="task-dot"></span><strong id="phase">等待操作</strong></div><div><span id="elapsed"></span><button class="text-button" id="cancel" disabled>取消任务</button></div></div>

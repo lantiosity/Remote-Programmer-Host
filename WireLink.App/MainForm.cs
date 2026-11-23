@@ -23,6 +23,10 @@ public sealed class MainForm : ChromeForm
     private readonly string root = FindRoot();
     private readonly string configPath;
     private readonly PyOcdService pyocd;
+    private readonly DfpLibrary dfps;
+    private readonly OfflineLibrary offline;
+    private Task? offlineOperation;
+    private long packImport;
     private Settings settings;
     private CancellationTokenSource? jobCancellation;
     private Task? operation;
@@ -56,10 +60,12 @@ public sealed class MainForm : ChromeForm
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         ShowIcon = true; // Shell/taskbar icon only; the custom caption draws no icon.
-        configPath = Directory.Exists(Path.Combine(AppContext.BaseDirectory, "engine"))
+        configPath = IsPortable
             ? Path.Combine(root, "data", "settings.json") : Path.Combine(root, ".wirelink-desktop.json");
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
         settings = Settings.Load(configPath);
+        dfps = new(root);
+        offline = new(Path.Combine(root, "data", "offline"));
         dark = WindowAppearance.IsDark(settings.Theme);
         var palette = WindowPalette.For(dark);
         BackColor = palette.Background;
@@ -114,9 +120,11 @@ public sealed class MainForm : ChromeForm
         startup.Save(root, source);
     }
 
+    private static bool IsPortable => File.Exists(Path.Combine(AppContext.BaseDirectory, "engine", "python.exe"));
+
     private static string FindRoot()
     {
-        if (Directory.Exists(Path.Combine(AppContext.BaseDirectory, "engine")))
+        if (IsPortable)
         {
             var folder = new DirectoryInfo(AppContext.BaseDirectory);
             return folder.Name.Equals("app", StringComparison.OrdinalIgnoreCase) && folder.Parent != null
@@ -271,14 +279,22 @@ public sealed class MainForm : ChromeForm
                     PresentWorkbench(data.TryGetProperty("source", out var source) ? source.GetString() ?? "unknown" : "unknown");
                     break;
                 case "targetsBackground":
-                    initialCatalog ??= new PyOcdService(root, _ => { }).CatalogAsync("targets", value, lifetime.Token);
+                    initialCatalog ??= new PyOcdService(root, _ => { }).CatalogAsync("targets", dfps.Resolve(value with { Pack = settings.Pack }), lifetime.Token);
                     Post(new { type = "data", kind = "targets", value = await initialCatalog });
                     break;
-                case "save": Persist(value); break;
+                case "save": Persist(value with { Pack = settings.Pack }); break;
                 case "theme":
                     ApplyAppearance(data.GetProperty("dark").GetBoolean());
                     break;
-                case "browse": Browse(data.GetProperty("key").GetString()!); break;
+                case "browse": await BrowseAsync(data.GetProperty("key").GetString()!); break;
+                case "pack_import":
+                    await ImportDfpAsync(value.Pack);
+                    break;
+                case "offline_list": case "offline_import": case "offline_preset": case "offline_remove": case "offline_export":
+                    if (confirming || offlineOperation is { IsCompleted: false }) throw new InvalidOperationException("请先完成当前操作");
+                    offlineOperation = ManageOfflineAsync(action, data);
+                    await offlineOperation;
+                    break;
                 case "export": ExportLogs(); break;
                 case "clearLog": lock (logs) logs.Clear(); break;
                 case "wifi_ports":
@@ -310,7 +326,9 @@ public sealed class MainForm : ChromeForm
                     if (jobCancellation != null) throw new InvalidOperationException("已有任务正在运行");
                     if (serialOpening || serial != null && (action.StartsWith("wifi_") || action.StartsWith("ota_") || serialTransport == "BLE" || value.Transport == "BLE"))
                         throw new InvalidOperationException("请先关闭串口，再进行蓝牙操作或设备升级");
-                    ValidateAction(action, value);
+                    value = value with { Pack = settings.Pack };
+                    var resolved = dfps.Resolve(value);
+                    ValidateAction(action, resolved);
                     WifiSetupRequest? wifi = null;
                     if (action.StartsWith("wifi_"))
                     {
@@ -324,7 +342,7 @@ public sealed class MainForm : ChromeForm
                     jobCancellation = new();
                     activeAction = action;
                     Post(new { type = "job", busy = true, action });
-                    operation = RunJobAsync(action, value, jobCancellation.Token, wifi);
+                    operation = RunJobAsync(action, resolved, jobCancellation.Token, wifi);
                     await operation;
                     break;
                 default: throw new ArgumentException("不支持的操作");
@@ -518,7 +536,7 @@ public sealed class MainForm : ChromeForm
         finally { serialLifecycle.Release(); }
     }
 
-    private void Browse(string key)
+    private async Task BrowseAsync(string key)
     {
         var filter = key switch
         {
@@ -528,7 +546,70 @@ public sealed class MainForm : ChromeForm
             _ => throw new ArgumentException("不支持的文件类型")
         };
         using var dialog = new OpenFileDialog { Filter = filter, CheckFileExists = true, Title = "选择固件或芯片支持包" };
-        if (dialog.ShowDialog(this) == DialogResult.OK) Post(new { type = "file", key, path = dialog.FileName });
+        if (key == "pack" && Directory.Exists(dfps.DirectoryPath)) dialog.InitialDirectory = dfps.DirectoryPath;
+        await Task.Yield();
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (key == "pack") await ImportDfpAsync(dialog.FileName);
+        else Post(new { type = "file", key, path = dialog.FileName });
+    }
+
+    private async Task ImportDfpAsync(string path)
+    {
+        var import = ++packImport;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(path)) path = await dfps.ImportAsync(path, lifetime.Token);
+        }
+        catch
+        {
+            if (import == packImport) Post(new { type = "file", key = "pack", path = settings.Pack });
+            throw;
+        }
+        if (import != packImport || closing) return;
+        Persist(settings with { Pack = path });
+        Post(new { type = "file", key = "pack", path });
+    }
+
+    private async Task ManageOfflineAsync(string action, JsonElement data)
+    {
+        var name = data.TryGetProperty("name", out var item) ? item.GetString() ?? "" : "";
+        await Task.Yield(); // Leave the WebView callback before opening file dialogs.
+        lifetime.Token.ThrowIfCancellationRequested();
+        string? notice = null;
+        switch (action)
+        {
+            case "offline_import":
+                using (var picker = new OpenFileDialog { Title = "导入 STM32 目标镜像", Filter = "目标芯片 BIN|*.bin", CheckFileExists = true })
+                {
+                    if (picker.ShowDialog(this) != DialogResult.OK) return;
+                    name = await offline.ImportAsync(picker.FileName, lifetime.Token);
+                    notice = "镜像已保存到本地库。";
+                }
+                break;
+            case "offline_preset":
+                offline.SetPreset(name, data.GetProperty("address").GetString() ?? "", data.GetProperty("reset").GetBoolean());
+                notice = "面板参数已保存到本地。";
+                break;
+            case "offline_remove":
+                if (!await ConfirmAsync(new("移除本地镜像", $"从 WireLink 本地库移除 {name} 及其保存的面板参数。", "移除镜像", true))) return;
+                offline.Remove(name);
+                name = "";
+                notice = "已移除本地镜像。";
+                break;
+            case "offline_export":
+                using (var picker = new FolderBrowserDialog
+                {
+                    Description = "选择 FAT32 microSD 的盘符根目录",
+                    UseDescriptionForTitle = true, ShowNewFolderButton = false
+                })
+                {
+                    if (picker.ShowDialog(this) != DialogResult.OK) return;
+                    await offline.ExportAsync(name, picker.SelectedPath, lifetime.Token);
+                    notice = "已复制并校验。请安全弹出 microSD，再插入烧录器。";
+                }
+                break;
+        }
+        Post(new { type = "data", kind = "offline_library", value = new { items = offline.List(), selected = name, notice } });
     }
 
     private void ExportLogs()
@@ -554,6 +635,7 @@ public sealed class MainForm : ChromeForm
         {
             if (operation != null) await operation;
             if (initialCatalog != null) { try { await initialCatalog; } catch { } }
+            if (offlineOperation != null) { try { await offlineOperation; } catch { } }
             if (serialOpenOperation != null) { try { await serialOpenOperation; } catch { } }
             await CloseSerialAsync();
         }

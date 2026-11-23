@@ -7,6 +7,7 @@ let checkingHost = false;
 let saveTimer, toastTimer;
 let decoder = new TextDecoder('utf-8');
 let terminalText = '';
+let offlineItems = [], offlinePending = false;
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 
 function applyTheme(theme, notify = true) {
@@ -104,6 +105,7 @@ function lockControls() {
   $('#serial-toggle').disabled = state.busy || state.serial === 'opening';
   $('#serial-toggle').textContent = state.serial === 'connected' ? '关闭连接' : state.serial === 'opening' ? '正在连接…' : '打开连接';
   $('#send').disabled = state.serial !== 'connected';
+  lockOfflineControls();
 }
 
 function log(text) {
@@ -131,7 +133,16 @@ function catalog(id, values) {
 }
 
 function data(kind, value) {
-  if (kind === 'wifi_ports') {
+  if (kind === 'offline_library') {
+    const select = $('#offline-images');
+    const selected = value.selected || select.value;
+    offlineItems = value.items;
+    select.replaceChildren(...offlineItems.map(item => new Option(item.name, item.name)));
+    if (!offlineItems.length) select.add(new Option('暂无镜像', ''));
+    if (offlineItems.some(item => item.name === selected)) select.value = selected;
+    showOfflineImage();
+    $('#offline-result').textContent = value.notice ?? '';
+  } else if (kind === 'wifi_ports') {
     catalog('wifi-ports', value);
     toast(value.length ? '请选择烧录器的 CH343 控制台串口。' : '没有发现串口，请连接 CH343 控制台 USB。');
   } else if (kind === 'wifi_setup') {
@@ -239,7 +250,10 @@ function handleMessage(message) {
       break;
     }
     case 'error': toast(message.text); break;
-    case 'file': setSetting(message.key, message.path); break;
+    case 'file':
+      setSetting(message.key, message.path);
+      if (message.key === 'pack' && message.path.startsWith('data/dfp/')) toast('DFP 已保存在 data/dfp。可点击「加载芯片列表」查看型号。');
+      break;
     case 'log': log(message.text); break;
     case 'data': data(message.kind, message.value); break;
     case 'phase': $('#phase').textContent = message.text; break;
@@ -306,14 +320,66 @@ function presentWhenPainted() {
 
 function counts() { $('#byte-count').textContent = `RX ${state.rx.toLocaleString()} B / TX ${state.tx.toLocaleString()} B`; }
 
+function offlineImage() { return offlineItems.find(item => item.name === $('#offline-images').value); }
+function hexAddress(value) { return '0x' + value.toString(16).toUpperCase().padStart(8, '0'); }
+
+function lockOfflineControls() {
+  const locked = offlinePending || state.hostLost;
+  const hasImage = !!offlineImage();
+  $('#offline-images').disabled = locked || !hasImage;
+  $('#offline-address').disabled = locked || !hasImage;
+  $('#offline-reset').disabled = locked || !hasImage;
+  $$('[data-offline]').forEach(button => {
+    button.disabled = locked || (!hasImage && !['offline_import', 'offline_list'].includes(button.dataset.offline));
+  });
+}
+
+function showOfflineImage() {
+  const image = offlineImage();
+  $('#offline-address').value = hexAddress(image?.address ?? 0x08000000);
+  $('#offline-reset').checked = image?.reset ?? false;
+  $('#offline-image-detail').textContent = image ? `${image.size.toLocaleString()} 字节 · data/offline` : '导入的镜像保存在 data/offline。';
+  $('#offline-range').textContent = image?.eraseEnd == null ? '保存面板参数后可查看擦除范围。'
+    : `预计擦除 ${hexAddress(image.address)}–${hexAddress(image.eraseEnd)}，包含镜像末尾所在的整个扇区。`;
+  lockOfflineControls();
+}
+
+async function manageOffline(action) {
+  if (offlinePending) return;
+  offlinePending = true;
+  lockOfflineControls();
+  $('#offline-result').textContent = '';
+  try {
+    await request(action, { name: $('#offline-images').value, address: $('#offline-address').value,
+      reset: $('#offline-reset').checked });
+  } catch (error) {
+    $('#offline-result').textContent = error.message;
+  } finally {
+    offlinePending = false;
+    lockOfflineControls();
+  }
+}
+
+$('#offline-images').addEventListener('change', showOfflineImage);
+$('#offline-address').addEventListener('input', () => {
+  $('#offline-range').textContent = '起始地址已编辑。保存面板参数可重新计算擦除范围。';
+});
+$$('[data-offline]').forEach(button => button.addEventListener('click', () => manageOffline(button.dataset.offline)));
+
 $$('[data-page]').forEach(button => button.addEventListener('click', () => {
   pickers.close();
   $$('[data-page]').forEach(item => item.classList.toggle('active', item === button));
   $$('.page').forEach(page => page.classList.toggle('hidden', page.id !== 'page-' + button.dataset.page));
-  $('#breadcrumb').textContent = { flash: '目标芯片烧录', serial: '串口监视器', ota: '烧录器固件升级', wifi: 'WiFi 配置' }[button.dataset.page];
+  $('#breadcrumb').textContent = { flash: '目标芯片烧录', serial: '串口监视器', ota: '烧录器固件升级', wifi: 'WiFi 配置', offline: '离线烧录' }[button.dataset.page];
+  if (button.dataset.page === 'offline') manageOffline('offline_list');
 }));
 $$('[data-transport]').forEach(button => button.addEventListener('click', () => { showTransport(button.dataset.transport); saveSoon(); lockControls(); }));
 $$('[data-setting]').forEach(input => input.addEventListener('change', () => {
+  if (input.dataset.setting === 'pack') {
+    clearTimeout(saveTimer);
+    run('pack_import');
+    return;
+  }
   snapshot(); showFilename();
   if (input.dataset.setting === 'theme') applyTheme(input.value);
   saveSoon();
