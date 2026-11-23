@@ -49,7 +49,7 @@ $readme = (Get-Content -LiteralPath "$workspace/assets/PORTABLE-README.txt" -Raw
 foreach ($settings in @("$destination/data/settings.json", "$destination/.wirelink-desktop.json")) {
     if (Test-Path -LiteralPath $settings) { Copy-Item -LiteralPath $settings -Destination "$staging/data/settings.json"; break }
 }
-foreach ($library in @('dfp', 'offline')) {
+foreach ($library in @('dfp', 'offline', 'theme')) {
     $source = "$destination/data/$library"
     if (Test-Path -LiteralPath $source -PathType Container) {
         Copy-Item -LiteralPath $source -Destination "$staging/data" -Recurse

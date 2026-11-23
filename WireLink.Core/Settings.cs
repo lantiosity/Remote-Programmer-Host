@@ -14,6 +14,15 @@ public sealed record ThemeColors(string Accent, string Background, string Surfac
         && value.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") < 0;
 }
 
+public sealed record ThemeAppearance(int Opacity = 100, int ImageOpacity = 45, string? Image = null, bool Frosted = false)
+{
+    public const int MinimumOpacity = 50;
+    public static bool IsImageId(string? id) => id is { Length: 32 } && id.AsSpan().IndexOfAnyExcept("0123456789abcdef") < 0;
+
+    public ThemeAppearance Normalize() => new(Math.Clamp(Opacity, MinimumOpacity, 100),
+        Math.Clamp(ImageOpacity, 0, 100), IsImageId(Image) ? Image : null, Frosted);
+}
+
 public sealed record Settings
 {
     public string Transport { get; init; } = "USB";
@@ -43,6 +52,7 @@ public sealed record Settings
     public bool VerifyOnly { get; init; }
     public string Theme { get; init; } = "system";
     public ThemeColors? CustomTheme { get; init; }
+    public ThemeAppearance ThemeAppearance { get; init; } = new();
 
     public static readonly JsonSerializerOptions Json = new()
     {

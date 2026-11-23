@@ -25,6 +25,8 @@ public sealed class MainForm : ChromeForm
     private readonly string configPath;
     private readonly PyOcdService pyocd;
     private readonly DfpLibrary dfps;
+    private readonly ThemeBackgroundStore backgrounds;
+    private Task? themeImageOperation;
     private readonly OfflineLibrary offline;
     private Task? offlineOperation;
     private long packImport;
@@ -65,11 +67,18 @@ public sealed class MainForm : ChromeForm
             ? Path.Combine(root, "data", "settings.json") : Path.Combine(root, ".wirelink-desktop.json");
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
         settings = Settings.Load(configPath);
+        backgrounds = new(root);
+        var savedAppearance = settings.ThemeAppearance?.Normalize() ?? new ThemeAppearance();
+        settings = settings with
+        {
+            ThemeAppearance = backgrounds.Exists(savedAppearance.Image) ? savedAppearance : savedAppearance with { Image = null }
+        };
         dfps = new(root);
         offline = new(Path.Combine(root, "data", "offline"));
         dark = WindowAppearance.IsDark(settings.Theme);
         var palette = appearance = WindowPalette.For(dark, settings.CustomTheme);
         BackColor = palette.Background;
+        content.BackColor = palette.Background;
         // Set before creating the browser surface, including its first compositor frame.
         Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", palette.Background.ToArgb().ToString("X8"));
         web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = palette.Background };
@@ -78,6 +87,7 @@ public sealed class MainForm : ChromeForm
         content.Controls.Add(startupSurface);
         Controls.Add(content);
         InstallChrome(palette, OpenThemeEditor);
+        Opacity = settings.ThemeAppearance.Opacity / 100d;
         startupSurface.BringToFront();
         pyocd = new(root, Log);
         startup.Mark("form_created");
@@ -97,16 +107,21 @@ public sealed class MainForm : ChromeForm
         _ = InitializeAsync();
     }
 
-    private void ApplyAppearance(bool isDark, ThemeColors? custom)
+    private void ApplyAppearance(bool isDark, ThemeColors? custom, ThemeAppearance effects)
     {
-        dark = isDark;
-        var palette = appearance = WindowPalette.For(dark, custom);
-        BackColor = palette.Background;
-        content.BackColor = palette.Background;
-        ApplyChromePalette(palette);
-        web.DefaultBackgroundColor = palette.Background;
-        if (!startupSurface.IsDisposed) startupSurface.ApplyPalette(palette);
-        WindowAppearance.ApplyFrame(Handle, dark, palette);
+        var palette = WindowPalette.For(isDark, custom);
+        if (dark != isDark || appearance != palette)
+        {
+            dark = isDark;
+            appearance = palette;
+            content.BackColor = palette.Background;
+            ApplyChromePalette(palette);
+            web.DefaultBackgroundColor = palette.Background;
+            if (!startupSurface.IsDisposed) startupSurface.ApplyPalette(palette);
+            WindowAppearance.ApplyFrame(Handle, dark, palette);
+        }
+        var opacity = effects.Opacity / 100d;
+        if (Math.Abs(Opacity - opacity) >= .005) Opacity = opacity;
     }
 
     private void PresentWorkbench(string source)
@@ -165,6 +180,16 @@ public sealed class MainForm : ChromeForm
             core.Settings.IsZoomControlEnabled = false;
             core.SetVirtualHostNameToFolderMapping(HostName, Path.Combine(AppContext.BaseDirectory, "wwwroot"),
                 CoreWebView2HostResourceAccessKind.DenyCors);
+            try
+            {
+                Directory.CreateDirectory(backgrounds.DirectoryPath);
+                core.SetVirtualHostNameToFolderMapping(ThemeBackgroundStore.HostName, backgrounds.DirectoryPath,
+                    CoreWebView2HostResourceAccessKind.DenyCors);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log("背景图片目录不可用：" + ex.Message);
+            }
             core.NavigationStarting += (_, args) =>
             {
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri) || uri.GetLeftPart(UriPartial.Authority) != Origin)
@@ -257,7 +282,7 @@ public sealed class MainForm : ChromeForm
 
     private void Persist(Settings value)
     {
-        settings = value with { CustomTheme = settings.CustomTheme };
+        settings = value with { CustomTheme = settings.CustomTheme, ThemeAppearance = settings.ThemeAppearance };
         try { settings.Save(configPath); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log("配置保存失败，请检查 data 目录写入权限：" + ex.Message); }
     }
@@ -292,15 +317,28 @@ public sealed class MainForm : ChromeForm
                     break;
                 case "save": Persist(value with { Pack = settings.Pack }); break;
                 case "theme":
-                    ApplyAppearance(data.GetProperty("dark").GetBoolean(), data.GetProperty("colors").Deserialize<ThemeColors>(Settings.Json));
+                    ApplyAppearance(data.GetProperty("dark").GetBoolean(), data.GetProperty("colors").Deserialize<ThemeColors>(Settings.Json), ReadThemeAppearance(data));
                     break;
                 case "theme_save":
+                    if (themeImageOperation is { IsCompleted: false }) throw new InvalidOperationException("请等待背景图片载入完成。");
                     var colors = data.GetProperty("colors").Deserialize<ThemeColors>(Settings.Json);
                     if (colors != null && ThemeColors.Validated(colors) == null) throw new ArgumentException("主题颜色格式无效");
-                    var themed = settings with { Theme = value.Theme, CustomTheme = colors };
+                    var effects = ReadThemeAppearance(data);
+                    var previousImage = settings.ThemeAppearance.Image;
+                    if (!backgrounds.CanSave(effects.Image, previousImage)) throw new ArgumentException("背景图片已不可用，请重新选择。");
+                    var themed = settings with { Theme = value.Theme, CustomTheme = colors, ThemeAppearance = effects };
                     themed.Save(configPath);
                     settings = themed;
-                    ApplyAppearance(data.GetProperty("dark").GetBoolean(), colors);
+                    backgrounds.Commit(effects.Image, previousImage);
+                    ApplyAppearance(data.GetProperty("dark").GetBoolean(), colors, effects);
+                    break;
+                case "theme_pick_image":
+                    if (themeImageOperation is { IsCompleted: false }) throw new InvalidOperationException("正在选择背景图片。");
+                    themeImageOperation = PickThemeBackgroundAsync();
+                    await themeImageOperation;
+                    break;
+                case "theme_discard":
+                    if (themeImageOperation is not { IsCompleted: false }) backgrounds.Discard();
                     break;
                 case "browse": await BrowseAsync(data.GetProperty("key").GetString()!); break;
                 case "pack_import":
@@ -371,6 +409,23 @@ public sealed class MainForm : ChromeForm
             else Post(new { type = "error", text = ex.Message });
             Log(ex.Message);
         }
+    }
+
+    private ThemeAppearance ReadThemeAppearance(JsonElement data) => data.TryGetProperty("appearance", out var effects)
+        ? effects.Deserialize<ThemeAppearance>(Settings.Json)?.Normalize() ?? new ThemeAppearance()
+        : settings.ThemeAppearance;
+
+    private async Task PickThemeBackgroundAsync()
+    {
+        await Task.Yield();
+        if (closing || confirming || IsDisposed) return;
+        using var picker = new OpenFileDialog
+        {
+            Title = "选择背景图片", Filter = "背景图片|*.png;*.jpg;*.jpeg;*.bmp", CheckFileExists = true
+        };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        var image = await backgrounds.ImportAsync(picker.FileName, lifetime.Token);
+        Post(new { type = "themeImage", image });
     }
 
     private static void ValidateAction(string action, Settings value)
@@ -652,9 +707,10 @@ public sealed class MainForm : ChromeForm
             if (operation != null) await operation;
             if (initialCatalog != null) { try { await initialCatalog; } catch { } }
             if (offlineOperation != null) { try { await offlineOperation; } catch { } }
+            if (themeImageOperation != null) { try { await themeImageOperation; } catch { } }
             if (serialOpenOperation != null) { try { await serialOpenOperation; } catch { } }
             await CloseSerialAsync();
         }
-        finally { lifetime.Dispose(); allowClose = true; Close(); }
+        finally { backgrounds.Discard(); lifetime.Dispose(); allowClose = true; Close(); }
     }
 }
