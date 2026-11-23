@@ -63,7 +63,7 @@ internal sealed class ConfirmationDialog : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        WindowAppearance.ApplyFrame(Handle, dark, palette);
+        WindowAppearance.ApplyFrame(Handle, dark);
     }
 
     protected override void OnPaint(PaintEventArgs e)

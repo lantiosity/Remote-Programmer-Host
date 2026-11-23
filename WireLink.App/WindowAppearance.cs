@@ -75,19 +75,6 @@ internal static class WindowAppearance
         public int TransitionOnMaximized = 0;
     }
 
-    [DllImport("uxtheme.dll")]
-    private static extern IntPtr BeginBufferedPaint(IntPtr dc, ref PaintRect rect, int format,
-        IntPtr parameters, out IntPtr bufferDc);
-
-    [DllImport("uxtheme.dll")]
-    private static extern int EndBufferedPaint(IntPtr buffer, [MarshalAs(UnmanagedType.Bool)] bool update);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PaintRect(Rectangle bounds)
-    {
-        public int Left = bounds.Left, Top = bounds.Top, Right = bounds.Right, Bottom = bounds.Bottom;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct FrameMargins(int inset)
     {
@@ -117,25 +104,6 @@ internal static class WindowAppearance
         }
     }
 
-    public static bool PaintWithAlpha(Graphics target, Rectangle bounds, Action<Graphics> paint)
-    {
-        var dc = target.GetHdc();
-        try
-        {
-            var rect = new PaintRect(bounds);
-            var buffer = BeginBufferedPaint(dc, ref rect, 2, IntPtr.Zero, out var bufferDc); // BPBF_TOPDOWNDIB
-            if (buffer == IntPtr.Zero) return false;
-            try
-            {
-                using var graphics = Graphics.FromHdc(bufferDc);
-                paint(graphics);
-            }
-            finally { EndBufferedPaint(buffer, true); }
-            return true;
-        }
-        finally { target.ReleaseHdc(dc); }
-    }
-
     public static bool IsDark(string? preference)
     {
         if (preference == "dark") return true;
@@ -149,13 +117,13 @@ internal static class WindowAppearance
         { return false; }
     }
 
-    public static void ApplyFrame(IntPtr handle, bool dark, WindowPalette palette)
+    public static void ApplyFrame(IntPtr handle, bool dark, bool rounded = true)
     {
         var value = dark ? 1 : 0;
         DwmSetWindowAttribute(handle, 20, ref value, sizeof(int));
         value = unchecked((int)0xFFFFFFFE); // DWMWA_COLOR_NONE: no focus-dependent DWM outline.
         DwmSetWindowAttribute(handle, 34, ref value, sizeof(int));
-        value = 2; // Rounded corners where supported; no OS caption is rendered.
+        value = rounded ? 2 : 1; // DWMWCP_ROUND / DWMWCP_DONOTROUND.
         DwmSetWindowAttribute(handle, 33, ref value, sizeof(int));
     }
 }

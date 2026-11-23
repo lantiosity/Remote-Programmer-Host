@@ -23,6 +23,7 @@ public sealed class MainForm : ChromeForm
     private bool presented;
     private bool desktopBackdrop;
     private WindowAppearance.DesktopMaterial? desktopMaterial;
+    private RegionBackdrop? regionBackdrop;
     private bool windowActive;
     private bool windowMaximized;
     private ThemeAppearance displayedEffects = new();
@@ -64,10 +65,12 @@ public sealed class MainForm : ChromeForm
         using (var embeddedIcon = new Icon(stream))
             Icon = (Icon)embeddedIcon.Clone();
         FormClosed += (_, _) => Icon?.Dispose();
+        FormClosed += (_, _) => regionBackdrop?.Dispose();
         Size = new(1320, 920);
         MinimumSize = new(1100, 780);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
+        FormBorderStyle = FormBorderStyle.None;
         ShowIcon = true; // Shell/taskbar icon only; the custom caption draws no icon.
         configPath = IsPortable
             ? Path.Combine(root, "data", "settings.json") : Path.Combine(root, ".wirelink-desktop.json");
@@ -93,7 +96,6 @@ public sealed class MainForm : ChromeForm
         content.Controls.Add(web);
         content.Controls.Add(startupSurface);
         Controls.Add(content);
-        InstallChrome(palette, OpenThemeEditor);
         startupSurface.BringToFront();
         pyocd = new(root, Log);
         startup.Mark("form_created");
@@ -103,7 +105,7 @@ public sealed class MainForm : ChromeForm
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        WindowAppearance.ApplyFrame(Handle, dark, appearance);
+        WindowAppearance.ApplyFrame(Handle, dark);
         desktopBackdrop = WindowAppearance.EnableDesktopBackdrop(Handle);
         desktopMaterial = null;
         SetWindowBackdrop(displayedEffects);
@@ -138,10 +140,35 @@ public sealed class MainForm : ChromeForm
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
+        PresentRegionBackdrop();
         var maximized = WindowState == FormWindowState.Maximized;
         if (windowMaximized == maximized) return;
         windowMaximized = maximized;
         Post(new { type = "windowSizeMode", maximized });
+    }
+
+    protected override void OnLocationChanged(EventArgs e)
+    {
+        base.OnLocationChanged(e);
+        PresentRegionBackdrop();
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        PresentRegionBackdrop();
+    }
+
+    private void PresentRegionBackdrop()
+    {
+        if (regionBackdrop == null) return;
+        if (!presented || !Visible || closing || WindowState == FormWindowState.Minimized ||
+            desktopMaterial != WindowAppearance.DesktopMaterial.Clear)
+        {
+            regionBackdrop.Hide();
+            return;
+        }
+        regionBackdrop.Present(Handle, RectangleToScreen(ClientRectangle), DeviceDpi / 96d, dark);
     }
 
     private void ApplyAppearance(bool isDark, ThemeColors? custom, ThemeAppearance effects)
@@ -151,11 +178,11 @@ public sealed class MainForm : ChromeForm
         {
             dark = isDark;
             appearance = palette;
-            ApplyChromePalette(palette);
+            BackColor = palette.Background;
             if (!desktopBackdrop || !presented)
                 content.BackColor = web.DefaultBackgroundColor = palette.Background;
             if (!startupSurface.IsDisposed) startupSurface.ApplyPalette(palette);
-            WindowAppearance.ApplyFrame(Handle, dark, palette);
+            WindowAppearance.ApplyFrame(Handle, dark);
         }
         SetWindowBackdrop(effects);
     }
@@ -164,18 +191,17 @@ public sealed class MainForm : ChromeForm
     {
         displayedEffects = effects;
         if (!desktopBackdrop) return;
-        var translucent = effects.Opacity < 100;
-        if (presented)
-        {
-            BackColor = translucent ? Color.Black : appearance.Header;
-            SetCaptionOpacity(effects.Opacity);
-        }
+        var translucent = effects.Opacity < 100 || effects.SidebarOpacity < 100;
+        if (presented) BackColor = Color.Black;
         var material = !translucent ? WindowAppearance.DesktopMaterial.Solid
-            : effects.WindowAcrylic == true && (windowActive || effects.KeepAcrylicWhenInactive)
+            : effects.Opacity < 100 && effects.WindowAcrylic == true && (windowActive || effects.KeepAcrylicWhenInactive)
                 ? WindowAppearance.DesktopMaterial.Acrylic : WindowAppearance.DesktopMaterial.Clear;
-        if (desktopMaterial == material) return;
-        WindowAppearance.SetDesktopMaterial(Handle, material);
-        desktopMaterial = material;
+        if (desktopMaterial != material)
+        {
+            WindowAppearance.SetDesktopMaterial(Handle, material);
+            desktopMaterial = material;
+        }
+        PresentRegionBackdrop();
     }
 
     private void PresentWorkbench(string source)
@@ -238,6 +264,8 @@ public sealed class MainForm : ChromeForm
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.AreBrowserAcceleratorKeysEnabled = false;
             core.Settings.IsZoomControlEnabled = false;
+            try { core.Settings.IsNonClientRegionSupportEnabled = true; }
+            catch (NotImplementedException) { } // Older runtimes can still load the workbench.
             core.SetVirtualHostNameToFolderMapping(HostName, Path.Combine(AppContext.BaseDirectory, "wwwroot"),
                 CoreWebView2HostResourceAccessKind.DenyCors);
             try
@@ -261,7 +289,8 @@ public sealed class MainForm : ChromeForm
             core.WebMessageReceived += MessageReceivedAsync;
             core.ProcessFailed += (_, _) => pendingConfirmation?.Completion.TrySetResult(false);
             // Theme is available before the document's styles or deferred app script run.
-            await core.AddScriptToExecuteOnDocumentCreatedAsync($"window.__wirelinkDesktopBackdrop = {(desktopBackdrop ? "true" : "false")}; window.__wirelinkSettings = "
+            await core.AddScriptToExecuteOnDocumentCreatedAsync($"window.__wirelinkDesktopBackdrop = {(desktopBackdrop ? "true" : "false")}; "
+                + $"window.__wirelinkRegionBackdrop = {(desktopBackdrop && RegionBackdrop.IsSupported ? "true" : "false")}; window.__wirelinkSettings = "
                 + JsonSerializer.Serialize(settings, Settings.Json) + ";");
             if (closing || IsDisposed) return;
             startupSurface.Status = "正在载入工作台…";
@@ -322,13 +351,6 @@ public sealed class MainForm : ChromeForm
             web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value, WebJson));
     });
 
-    private void OpenThemeEditor()
-    {
-        if (!presented || closing || confirming) return;
-        web.Focus();
-        Post(new { type = "themeEditor" });
-    }
-
     private void Log(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
@@ -376,9 +398,24 @@ public sealed class MainForm : ChromeForm
                 case "window_resize":
                     BeginEdgeResize(data.GetProperty("direction").GetInt32());
                     break;
+                case "window_minimize": WindowState = FormWindowState.Minimized; break;
+                case "window_maximize":
+                    WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+                    break;
+                case "window_close": Close(); break;
                 case "window_resize_move":
                     MoveEdgeResize(data.GetProperty("x").GetInt32(), data.GetProperty("y").GetInt32(),
                         data.GetProperty("finished").GetBoolean());
+                    break;
+                case "glass_regions":
+                    if (!desktopBackdrop || !RegionBackdrop.IsSupported) break;
+                    var regions = data.GetProperty("regions").Deserialize<GlassRegion[]>(WebJson) ?? [];
+                    if (regions.Length > 32 || regions.Any(r =>
+                        Math.Abs(r.X) > 32768 || Math.Abs(r.Y) > 32768 || r.Width is <= 0 or > 32768 ||
+                        r.Height is <= 0 or > 32768 || r.Radius is < 0 or > 512)) break;
+                    regionBackdrop ??= new();
+                    regionBackdrop.UpdateMask(regions);
+                    PresentRegionBackdrop();
                     break;
                 case "confirm_result":
                     if (pendingConfirmation is { } confirmation && data.GetProperty("promptId").GetString() == confirmation.Id)
