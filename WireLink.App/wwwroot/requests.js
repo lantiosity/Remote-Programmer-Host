@@ -31,6 +31,11 @@
     if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
     switch (message.type) {
       case 'themeEditor': return true;
+      case 'confirm': return typeof message.promptId === 'string' && message.prompt &&
+        typeof message.prompt.title === 'string' && typeof message.prompt.message === 'string' &&
+        typeof message.prompt.confirmLabel === 'string' && typeof message.prompt.destructive === 'boolean';
+      case 'windowActivation': return typeof message.active === 'boolean';
+      case 'windowSizeMode': return typeof message.maximized === 'boolean';
       case 'themeImage': return typeof message.image === 'string' && /^[0-9a-f]{32}$/.test(message.image);
       case 'response': return typeof message.id === 'string' && typeof message.ok === 'boolean';
       case 'rx': case 'tx': return typeof message.hex === 'string' && message.hex.length <= 1000000 && /^(?:[0-9a-fA-F]{2})*$/.test(message.hex);

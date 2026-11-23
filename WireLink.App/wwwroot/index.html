@@ -172,9 +172,17 @@
   <section id="frequency-menu" class="picker-popup frequency-popup hidden" aria-label="SWD 频率预设"><div class="picker-menu-heading">SWD 频率预设</div><div id="frequency-options" class="picker-options" data-scroll-area="SWD 频率" role="listbox" aria-label="SWD 频率"></div><div class="picker-footnote">也可手动输入 10～50000 kHz。</div></section>
   <div id="toast" role="alert" class="hidden"></div>
   <dialog id="ble-picker" data-scroll-area="蓝牙设备窗口"><div class="dialog-heading"><h2>选择蓝牙烧录器</h2><button class="text-button" id="close-picker">✕</button></div><div id="ble-devices" data-scroll-area="蓝牙设备列表"></div><p class="hint">同名设备请根据地址选择。</p></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="dialog-heading"><h2 id="confirm-title"></h2></div>
+    <p id="confirm-message"></p>
+    <div class="confirm-actions">
+      <button type="button" class="button" id="confirm-cancel" autofocus>取消</button>
+      <button type="button" class="button primary" id="confirm-accept">确认</button>
+    </div>
+  </dialog>
   <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description">
     <div class="dialog-heading"><h2 id="theme-title">自定义主题</h2></div>
-    <p id="theme-description">更改会实时预览。不透明度只作用于背景，0% 全透，100% 实色。</p>
+    <p id="theme-description">更改会实时预览。不透明度只调背景底色，弹窗跟随窗口背景。</p>
     <div class="theme-colors">
       <label>强调色<input type="color" data-theme-color="accent" value="#087f80"><output data-theme-value="accent"></output></label>
       <label>工作区色调<input type="color" data-theme-color="background" value="#f5f7fb"><output data-theme-value="background"></output></label>
@@ -189,7 +197,9 @@
         <button type="button" id="theme-clear-image" class="text-button">移除</button>
       </div>
       <label class="theme-range">图片强度<input id="theme-image-opacity" type="range" min="0" max="100" value="45"><output id="theme-image-opacity-value">45%</output></label>
-      <label class="checkbox theme-frosted"><input id="theme-frosted" type="checkbox"><span>窗口和卡片使用毛玻璃</span></label>
+      <label class="theme-switch"><span>窗口亚克力</span><input type="checkbox" role="switch" data-theme-switch="window_acrylic"></label>
+      <label class="theme-switch"><span>未聚焦时保留窗口亚克力</span><input type="checkbox" role="switch" data-theme-switch="keep_acrylic_when_inactive"></label>
+      <label class="theme-switch"><span>卡片毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="card_frosted"></label>
     </div>
     <p id="theme-error" role="alert" hidden></p>
     <div class="theme-actions">

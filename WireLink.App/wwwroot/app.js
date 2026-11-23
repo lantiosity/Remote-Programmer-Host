@@ -10,12 +10,39 @@ let terminalText = '';
 let offlineItems = [], offlinePending = false;
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 const themeEditor = $('#theme-dialog');
+const confirmationDialog = $('#confirm-dialog');
 const themeInputs = $$('[data-theme-color]');
+const themeSwitches = $$('[data-theme-switch]');
 let themeDraft = null;
 let appearanceDraft = window.WireLinkTheme.appearance();
 let themeSaving = false;
 let themePicking = false;
 let themePreviewTimer;
+
+function edgeResize(event) {
+  if (!window.chrome?.webview || document.documentElement.hasAttribute('data-window-maximized')) return null;
+  const edge = 6; // CSS pixels scale with the WebView's DPI.
+  const left = event.clientX < edge;
+  const right = event.clientX >= window.innerWidth - edge;
+  const bottom = event.clientY >= window.innerHeight - edge;
+  if (bottom && left) return { direction: 7, cursor: 'nesw-resize' };
+  if (bottom && right) return { direction: 8, cursor: 'nwse-resize' };
+  if (left || right) return { direction: left ? 1 : 2, cursor: 'ew-resize' };
+  return bottom ? { direction: 6, cursor: 'ns-resize' } : null;
+}
+
+window.addEventListener('pointermove', event => {
+  const cursor = edgeResize(event)?.cursor ?? '';
+  const root = document.documentElement;
+  if (root.dataset.resizeCursor !== cursor) root.dataset.resizeCursor = cursor;
+}, { passive: true });
+window.addEventListener('pointerdown', event => {
+  const edge = event.button === 0 && edgeResize(event);
+  if (!edge) return;
+  event.preventDefault();
+  event.stopPropagation();
+  window.chrome.webview.postMessage({ action: 'window_resize', direction: edge.direction });
+}, true);
 
 function applyTheme(theme, notify = true, colors = state.settings.custom_theme ?? null, effects = state.settings.theme_appearance) {
   theme = window.WireLinkTheme.mode(theme);
@@ -51,7 +78,7 @@ function showThemeInputs() {
   $('#theme-card-opacity-value').textContent = `${appearanceDraft.card_opacity}%`;
   $('#theme-image-opacity').value = appearanceDraft.image_opacity;
   $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
-  $('#theme-frosted').checked = appearanceDraft.frosted;
+  themeSwitches.forEach(input => { input.checked = appearanceDraft[input.dataset.themeSwitch]; });
   $('#theme-image-state').textContent = appearanceDraft.image ? '已选择图片' : '未设置';
   lockThemeControls();
 }
@@ -60,6 +87,7 @@ function lockThemeControls() {
   const locked = themeSaving || themePicking || state.hostLost;
   $$('#theme-dialog button, #theme-dialog input').forEach(field => { field.disabled = !!locked; });
   $('#theme-image-opacity').disabled = $('#theme-clear-image').disabled = !!locked || !appearanceDraft.image;
+  $('[data-theme-switch="keep_acrylic_when_inactive"]').disabled = !!locked || !appearanceDraft.window_acrylic;
 }
 
 function setThemeError(text) {
@@ -104,10 +132,11 @@ $('#theme-image-opacity').addEventListener('input', event => {
   $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
   previewTheme(false);
 });
-$('#theme-frosted').addEventListener('change', event => {
-  appearanceDraft.frosted = event.target.checked;
-  previewTheme();
-});
+themeSwitches.forEach(input => input.addEventListener('change', () => {
+  appearanceDraft[input.dataset.themeSwitch] = input.checked;
+  lockThemeControls();
+  previewTheme(input.dataset.themeSwitch !== 'card_frosted');
+}));
 $('#theme-pick-image').addEventListener('click', async () => {
   if (themePicking) return;
   themePicking = true;
@@ -152,6 +181,25 @@ $('#theme-save').addEventListener('click', async () => {
     lockThemeControls();
   }
 });
+
+$('#confirm-cancel').addEventListener('click', () => confirmationDialog.close());
+$('#confirm-accept').addEventListener('click', () => confirmationDialog.close('accept'));
+confirmationDialog.addEventListener('close', () => {
+  const promptId = confirmationDialog.dataset.promptId;
+  delete confirmationDialog.dataset.promptId;
+  run('confirm_result', { promptId, accepted: confirmationDialog.returnValue === 'accept' });
+});
+
+function showConfirmation({ promptId, prompt }) {
+  pickers.close();
+  confirmationDialog.dataset.promptId = promptId;
+  confirmationDialog.returnValue = '';
+  $('#confirm-title').textContent = prompt.title;
+  $('#confirm-message').textContent = prompt.message;
+  $('#confirm-accept').textContent = prompt.confirmLabel;
+  $('#confirm-accept').classList.toggle('confirm-destructive', prompt.destructive);
+  confirmationDialog.showModal();
+}
 
 function snapshot() {
   $$('[data-setting]').forEach(input => {
@@ -363,6 +411,9 @@ function onMessage(message) {
 function handleMessage(message) {
   switch (message.type) {
     case 'themeEditor': openThemeEditor(); break;
+    case 'confirm': showConfirmation(message); break;
+    case 'windowActivation': document.documentElement.toggleAttribute('data-window-inactive', !message.active); break;
+    case 'windowSizeMode': document.documentElement.toggleAttribute('data-window-maximized', message.maximized); break;
     case 'themeImage':
       if (themeEditor.open && themePicking) {
         appearanceDraft.image = message.image;
@@ -370,7 +421,10 @@ function handleMessage(message) {
         previewTheme(false);
       }
       break;
-    case 'init': populate(message.settings); lockControls();
+    case 'init':
+      document.documentElement.toggleAttribute('data-window-inactive', message.active === false);
+      document.documentElement.toggleAttribute('data-window-maximized', message.maximized === true);
+      populate(message.settings); lockControls();
       $$('[data-app-version]').forEach(element => element.textContent = message.version);
       if (!message.engineReady) { $('#footer-hint').textContent = 'pyOCD 尚未安装：请运行安装上位机依赖.cmd'; toast('缺少 pyOCD 引擎。串口和 BLE OTA 可独立使用。'); }
       presentWhenPainted();

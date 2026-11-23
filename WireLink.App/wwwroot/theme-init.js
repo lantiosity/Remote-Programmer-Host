@@ -32,7 +32,10 @@
   function appearance(value) {
     const clamp = (number, fallback) => Number.isInteger(number) ? Math.max(0, Math.min(100, number)) : fallback;
     return { opacity: clamp(value?.opacity, 100), image_opacity: clamp(value?.image_opacity, 45),
-      card_opacity: clamp(value?.card_opacity, 88), image: imageId(value?.image) ? value.image : null, frosted: value?.frosted === true };
+      card_opacity: clamp(value?.card_opacity, 88), image: imageId(value?.image) ? value.image : null,
+      window_acrylic: (value?.window_acrylic ?? value?.frosted) === true,
+      card_frosted: (value?.card_frosted ?? value?.frosted) === true,
+      keep_acrylic_when_inactive: value?.keep_acrylic_when_inactive === true };
   }
 
   function apply(value, custom, effects) {
@@ -42,7 +45,11 @@
     root.style.colorScheme = dark ? 'dark' : 'light';
     const layers = appearance(effects);
     root.toggleAttribute('data-wallpaper', layers.image !== null);
-    root.toggleAttribute('data-frosted', layers.frosted);
+    root.toggleAttribute('data-window-acrylic', layers.window_acrylic);
+    root.toggleAttribute('data-card-frosted', layers.card_frosted);
+    root.toggleAttribute('data-keep-acrylic', layers.keep_acrylic_when_inactive);
+    root.toggleAttribute('data-window-translucent', layers.opacity < 80 || layers.image !== null && layers.image_opacity > 0);
+    root.toggleAttribute('data-card-translucent', layers.card_opacity < 80);
     root.style.setProperty('--window-opacity', `${layers.opacity}%`);
     root.style.setProperty('--card-opacity', `${layers.card_opacity}%`);
     if (layers.image) {

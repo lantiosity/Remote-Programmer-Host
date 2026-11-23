@@ -22,7 +22,7 @@ function scan(selection, ids) {
     },
     window: {
       WireLinkRequests: { create() {} }, WireLinkPickers: { create() {} },
-      matchMedia
+      matchMedia, addEventListener() {}
     },
     TextDecoder, matchMedia, setTimeout() {}, clearTimeout() {}, setInterval() {}
   };
