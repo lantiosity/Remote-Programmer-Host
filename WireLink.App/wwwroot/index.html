@@ -7,6 +7,7 @@
   <title>WireLink</title>
   <script src="theme-init.js"></script>
   <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="navigation.css">
   <link rel="stylesheet" href="pickers.css">
   <link rel="stylesheet" href="wifi.css">
   <link rel="stylesheet" href="scrollbars.css">
@@ -19,12 +20,27 @@
   <aside class="sidebar" data-scroll-area="侧栏">
     <div class="brand"><div class="brandmark">W<span></span></div><div>WireLink<small>REMOTE PROGRAMMER</small></div><span class="version" data-app-version>—</span></div>
     <div class="section-label">工作空间</div>
-    <nav aria-label="功能导航">
-      <button class="nav-item active" data-page="flash"><span class="nav-icon">↯</span>目标芯片烧录<span class="nav-count">01</span></button>
-      <button class="nav-item" data-page="serial"><span class="nav-icon">⌘</span>串口监视器<span class="nav-count">02</span></button>
-      <button class="nav-item" data-page="ota"><span class="nav-icon">↑</span>烧录器固件升级<span class="nav-count">03</span></button>
-      <button class="nav-item" data-page="wifi"><span class="nav-icon">⌁</span>WiFi 配置<span class="nav-count">04</span></button>
-      <button class="nav-item" data-page="offline"><span class="nav-icon" aria-hidden="true">▤</span>离线烧录</button>
+    <nav class="workspace-nav" aria-label="功能导航">
+      <button class="nav-item" type="button" data-page="flash" aria-controls="page-flash" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-8 12h7l-1 8 8-12h-7z"/></svg>
+        <span>目标芯片烧录</span>
+      </button>
+      <button class="nav-item" type="button" data-page="serial" aria-controls="page-serial">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></svg>
+        <span>串口监视器</span>
+      </button>
+      <button class="nav-item" type="button" data-page="ota" aria-controls="page-ota">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+        <span>烧录器固件升级</span>
+      </button>
+      <button class="nav-item" type="button" data-page="wifi" aria-controls="page-wifi">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a14 14 0 0 1 18 0M6 12.5a9.5 9.5 0 0 1 12 0M9 16a5 5 0 0 1 6 0m-3 3h.01"/></svg>
+        <span>WiFi 配置</span>
+      </button>
+      <button class="nav-item" type="button" data-page="offline" aria-controls="page-offline">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a2 2 0 0 1 2-2Zm2 3v4m3-4v4m3-4v4m-6 6h6"/></svg>
+        <span>离线烧录</span>
+      </button>
     </nav>
     <div class="divider"></div>
     <div class="section-label">通信链路 <span class="online-dot"></span></div>
@@ -136,7 +152,7 @@
           </div>
           <p class="hint" id="offline-result" role="status"></p>
         </div>
-        <div class="notice"><span aria-hidden="true">i</span><p>参数保存在电脑上。插卡后在烧录器面板打开「存储卡镜像」，选择对应文件并按这里的地址、复位选项设置。需要脱卡使用时，在面板选择「保存到板载」。</p></div>
+        <div class="notice"><span aria-hidden="true">i</span><p>烧录器固件已内置 STM32H743VI 的离线烧录支持，microSD 上只需目标芯片的 BIN 镜像。DFP 用于上位机联机烧录。<br>参数保存在电脑上。插卡后在烧录器面板打开「存储卡镜像」，选择文件并设置地址和复位选项。需要脱卡使用时，在面板选择「保存到板载」。</p></div>
       </section>
       <section class="activity-panel">
         <div class="task-line"><div><span class="task-dot" id="task-dot"></span><strong id="phase">等待操作</strong></div><div><span id="elapsed"></span><button class="text-button" id="cancel" disabled>取消任务</button></div></div>

@@ -368,7 +368,10 @@ $$('[data-offline]').forEach(button => button.addEventListener('click', () => ma
 
 $$('[data-page]').forEach(button => button.addEventListener('click', () => {
   pickers.close();
-  $$('[data-page]').forEach(item => item.classList.toggle('active', item === button));
+  $$('[data-page]').forEach(item => {
+    if (item === button) item.setAttribute('aria-current', 'page');
+    else item.removeAttribute('aria-current');
+  });
   $$('.page').forEach(page => page.classList.toggle('hidden', page.id !== 'page-' + button.dataset.page));
   $('#breadcrumb').textContent = { flash: '目标芯片烧录', serial: '串口监视器', ota: '烧录器固件升级', wifi: 'WiFi 配置', offline: '离线烧录' }[button.dataset.page];
   if (button.dataset.page === 'offline') manageOffline('offline_list');
