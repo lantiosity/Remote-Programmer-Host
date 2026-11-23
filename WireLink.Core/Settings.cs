@@ -17,7 +17,8 @@ public sealed record ThemeColors(string Accent, string Background, string Surfac
 
 public sealed record ThemeAppearance(int Opacity = 100, int ImageOpacity = 45, string? Image = null,
     int CardOpacity = 88, bool? WindowAcrylic = null, bool? CardFrosted = null, bool KeepAcrylicWhenInactive = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Frosted = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Frosted = null,
+    int? SidebarOpacity = null, bool SidebarFrosted = false, int ControlTransparency = 0)
 {
     public static bool IsImageId(string? id) => id is { Length: 32 } && id.AsSpan().IndexOfAnyExcept("0123456789abcdef") < 0;
 
@@ -26,6 +27,8 @@ public sealed record ThemeAppearance(int Opacity = 100, int ImageOpacity = 45, s
         Opacity = Math.Clamp(Opacity, 0, 100),
         ImageOpacity = Math.Clamp(ImageOpacity, 0, 100),
         CardOpacity = Math.Clamp(CardOpacity, 0, 100),
+        SidebarOpacity = Math.Clamp(SidebarOpacity ?? Opacity, 0, 100),
+        ControlTransparency = Math.Clamp(ControlTransparency, 0, 100),
         Image = IsImageId(Image) ? Image : null,
         WindowAcrylic = WindowAcrylic ?? Frosted ?? false,
         CardFrosted = CardFrosted ?? Frosted ?? false,

@@ -110,13 +110,16 @@ Test("深色主题保存并恢复，兼容旧配置和损坏文件", () =>
     var path = Path.Combine(temp, "settings.json");
     var colors = new ThemeColors("#CD80F1", "#141827", "#304662");
     var effects = new ThemeAppearance(0, 61, "0123456789abcdef0123456789abcdef", CardOpacity: 0,
-        WindowAcrylic: true, CardFrosted: false, KeepAcrylicWhenInactive: true);
+        WindowAcrylic: true, CardFrosted: false, KeepAcrylicWhenInactive: true,
+        SidebarOpacity: 72, SidebarFrosted: true, ControlTransparency: 35);
     (settings with { Theme = "dark", CustomTheme = colors, ThemeAppearance = effects }).Save(path);
     var loaded = Settings.Load(path);
     Check(loaded.Theme == "dark" && ThemeColors.Validated(loaded.CustomTheme) == colors);
     Check(loaded.ThemeAppearance == effects && loaded.ThemeAppearance.Normalize() == effects);
     Check(new ThemeAppearance(-1, 400, "../image.png", CardOpacity: 400).Normalize()
-        == new ThemeAppearance(0, 100, CardOpacity: 100, WindowAcrylic: false, CardFrosted: false));
+        == new ThemeAppearance(0, 100, CardOpacity: 100, WindowAcrylic: false, CardFrosted: false, SidebarOpacity: 0));
+    Check(new ThemeAppearance(SidebarOpacity: -100, ControlTransparency: 120).Normalize() is
+        { SidebarOpacity: 0, ControlTransparency: 100 });
     Check(ThemeColors.Validated(colors with { Accent = "#12ZZ99" }) == null);
     (loaded with { CustomTheme = null }).Save(path);
     Check(Settings.Load(path).CustomTheme == null);
@@ -124,7 +127,8 @@ Test("深色主题保存并恢复，兼容旧配置和损坏文件", () =>
     var legacy = Settings.Load(path);
     Check(legacy.Theme == "system" && legacy.UsbId == "OLD" && legacy.ThemeAppearance == new ThemeAppearance());
     File.WriteAllText(path, "{\"theme_appearance\":{\"opacity\":35,\"frosted\":true,\"card_frosted\":false}}");
-    Check(Settings.Load(path).ThemeAppearance.Normalize() == new ThemeAppearance(35, WindowAcrylic: true, CardFrosted: false));
+    Check(Settings.Load(path).ThemeAppearance.Normalize() ==
+        new ThemeAppearance(35, WindowAcrylic: true, CardFrosted: false, SidebarOpacity: 35));
     File.WriteAllText(path, "bad JSON"); Check(Settings.Load(path) == new Settings());
 });
 Test("ESP32 镜像检查芯片、项目名和应用描述", () =>
