@@ -357,6 +357,7 @@ function showFilename() {
 
 function lockControls() {
   if (state.hostLost) {
+    pickers.close();
     $$('button,input,select').forEach(element => element.disabled = true);
     $('#phase').textContent = '宿主未响应，任务状态未知，正在等待恢复连接…';
     return;

@@ -50,29 +50,44 @@
     const byId = id => doc.getElementById(id);
     const targetInput = byId('target-input'), frequencyInput = byId('frequency-input');
     const targetMenu = byId('target-menu'), frequencyMenu = byId('frequency-menu');
+    const choiceMenu = byId('choice-menu'), choiceOptions = byId('choice-options');
+    const targetField = existingField(targetInput), frequencyField = existingField(frequencyInput);
     const search = byId('target-search');
     let targets = [], attempted = false, loading = false, loadPromise;
-    let vendor = '', family = '', popup = null, anchor = null, busy = false, loadError = '';
+    let vendor = '', family = '', popup = null, activeField = null, choiceFilter = '', busy = false, loadError = '';
     const presets = [10, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 10000, 20000, 40000, 50000];
 
-    function expand(input, value) {
-      input.setAttribute('aria-expanded', String(value));
-      input.parentElement.classList.toggle('open', value);
-      input.nextElementSibling.setAttribute('aria-expanded', String(value));
+    function existingField(input) {
+      return { trigger: input, control: input.parentElement, toggle: input.nextElementSibling };
+    }
+
+    function expand(field, value) {
+      field.trigger.setAttribute('aria-expanded', String(value));
+      field.control.classList.toggle('open', value);
+      field.toggle?.setAttribute('aria-expanded', String(value));
     }
 
     function close(focus = false) {
-      const previous = anchor;
-      targetMenu.classList.add('hidden'); frequencyMenu.classList.add('hidden');
-      expand(targetInput, false); expand(frequencyInput, false);
-      popup = anchor = null;
-      if (focus) previous?.querySelector('input')?.focus();
+      if (!popup) return;
+      const previous = activeField;
+      popup.classList.add('hidden');
+      expand(previous, false);
+      popup = activeField = null;
+      if (focus) previous.trigger.focus({ preventScroll: true });
+    }
+
+    function open(menu, field) {
+      close();
+      popup = menu;
+      activeField = field;
+      menu.classList.remove('hidden');
+      expand(field, true);
     }
 
     function position() {
-      if (!popup || !anchor) return;
-      const rect = anchor.getBoundingClientRect();
-      const width = popup === targetMenu ? Math.min(680, root.innerWidth - 24) : Math.max(210, rect.width);
+      if (!popup) return;
+      const rect = activeField.control.getBoundingClientRect();
+      const width = Math.min(popup === targetMenu ? 680 : Math.max(210, rect.width), root.innerWidth - 24);
       popup.style.width = width + 'px';
       popup.style.left = Math.max(8, Math.min(rect.left, root.innerWidth - width - 8)) + 'px';
       const height = popup.offsetHeight;
@@ -132,6 +147,7 @@
       const current = targets.find(item => item.name === getSettings().target);
       if (current) { vendor = current.vendor; family = current.family; }
       if (popup === targetMenu) renderTargets();
+      choiceFields.forEach(syncChoice);
     }
 
     async function reload(silent = false) {
@@ -152,26 +168,153 @@
     function showTargets() {
       if (busy) return;
       if (popup === targetMenu) { close(); return; }
-      close(); search.value = ''; sync();
-      popup = targetMenu; anchor = targetInput.parentElement;
-      targetMenu.classList.remove('hidden'); expand(targetInput, true); renderTargets(); search.focus();
+      search.value = ''; sync();
+      open(targetMenu, targetField); renderTargets(); search.focus();
       if (!attempted) reload(true);
     }
 
     function showFrequencies() {
       if (busy) return;
       if (popup === frequencyMenu) { close(); return; }
-      close(); const list = byId('frequency-options'); list.replaceChildren();
+      const list = byId('frequency-options'); list.replaceChildren();
       presets.forEach(value => {
         const button = option(list, value >= 1000 ? value / 1000 + ' MHz' : value + ' kHz', String(value) === frequencyInput.value,
           () => { setSetting('frequency', String(value)); close(true); });
         button.setAttribute('aria-label', `${value} kHz${value >= 1000 ? ' · ' + value / 1000 + ' MHz' : ''}`);
         const raw = doc.createElement('small'); raw.textContent = value + ' kHz'; button.append(raw);
       });
-      popup = frequencyMenu; anchor = frequencyInput.parentElement;
-      frequencyMenu.classList.remove('hidden'); expand(frequencyInput, true); position();
+      open(frequencyMenu, frequencyField); position();
       (list.querySelector('[aria-selected=true]') || list.querySelector('button'))?.focus();
     }
+
+    function choiceEntries(field, filter) {
+      const query = filter.trim().toLowerCase();
+      return [...(field.list || field.source).options].filter(item =>
+        item.label.toLowerCase().includes(query) || item.value.toLowerCase().includes(query));
+    }
+
+    function focusChoice(value) {
+      const buttons = [...choiceOptions.querySelectorAll('button:not(:disabled)')];
+      (buttons.find(button => button.dataset.value === value) ||
+        buttons.find(button => button.getAttribute('aria-selected') === 'true') || buttons[0])?.focus();
+    }
+
+    function renderChoices(field, entries = choiceEntries(field, choiceFilter)) {
+      const previousFocus = choiceOptions.contains(doc.activeElement) ? doc.activeElement.dataset.value : undefined;
+      byId('choice-heading').textContent = field.label;
+      choiceOptions.replaceChildren();
+      choiceOptions.scrollTop = 0;
+      entries.forEach(item => {
+        const selected = field.list ? item.value === field.source.value : item.selected;
+        const button = option(choiceOptions, item.label || item.value, selected, () => {
+          if (field.source.disabled) return;
+          const changed = field.source.value !== item.value;
+          field.source.value = item.value;
+          if (changed) {
+            if (field.list) field.source.dispatchEvent(new root.Event('input', { bubbles: true }));
+            field.source.dispatchEvent(new root.Event('change', { bubbles: true }));
+          }
+          close(true);
+        }, null, !!field.list);
+        button.disabled = item.disabled || !!item.closest('optgroup:disabled');
+        button.tabIndex = -1;
+        button.dataset.value = item.value;
+      });
+      if (!entries.length) empty(choiceOptions, field.list ? '暂无可选项，可手动输入。' : '暂无可选项。');
+      position();
+      if (previousFocus !== undefined) focusChoice(previousFocus);
+    }
+
+    function showChoices(field, focusOptions, filter = '', entries) {
+      if (field.source.disabled) return;
+      if (popup !== choiceMenu || activeField !== field) {
+        open(choiceMenu, field);
+        choiceFilter = filter;
+        renderChoices(field, entries);
+      }
+      if (focusOptions) focusChoice();
+    }
+
+    function syncChoice(field) {
+      if (field.list) field.toggle.disabled = field.source.disabled;
+      else {
+        field.trigger.disabled = field.source.disabled;
+        field.caption.textContent = field.source.selectedOptions[0]?.label || '请选择';
+      }
+      if (popup === choiceMenu && activeField === field) {
+        if (field.source.disabled) close();
+        else renderChoices(field);
+      }
+    }
+
+    function installChoice(source) {
+      const list = source.list || null;
+      const label = source.getAttribute('aria-label');
+      const control = doc.createElement('span');
+      control.className = 'picker-control';
+      source.before(control);
+      control.append(source);
+
+      let trigger = source, toggle, caption;
+      const button = doc.createElement('button');
+      button.type = 'button';
+      if (list) {
+        source.removeAttribute('list');
+        source.setAttribute('aria-autocomplete', 'list');
+        toggle = button;
+        toggle.className = 'picker-toggle';
+        toggle.setAttribute('aria-label', '展开' + label);
+        control.append(toggle);
+      } else {
+        source.hidden = true;
+        trigger = button;
+        trigger.className = 'picker-value';
+        trigger.setAttribute('aria-label', label);
+        caption = doc.createElement('span');
+        caption.id = 'picker-value-' + (source.id || source.dataset.setting);
+        trigger.setAttribute('aria-describedby', caption.id);
+        trigger.append(caption);
+        control.prepend(trigger);
+      }
+      for (const element of toggle ? [trigger, toggle] : [trigger]) {
+        element.setAttribute('aria-controls', 'choice-options');
+        element.setAttribute('aria-expanded', 'false');
+        element.setAttribute('aria-haspopup', 'listbox');
+      }
+      trigger.setAttribute('role', 'combobox');
+      const field = { source, list, label, control, trigger, toggle, caption };
+      button.addEventListener('click', () => {
+        if (popup === choiceMenu && activeField === field) close(!!list);
+        else showChoices(field, true);
+      });
+      trigger.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        showChoices(field, true);
+      });
+      if (list) {
+        trigger.addEventListener('click', () => showChoices(field, false));
+        trigger.addEventListener('input', () => {
+          if (doc.activeElement !== trigger) return;
+          const entries = choiceEntries(field, trigger.value);
+          if (popup === choiceMenu && activeField === field) {
+            if (!entries.length) { close(); return; }
+            choiceFilter = trigger.value;
+            renderChoices(field, entries);
+          } else if (entries.length) showChoices(field, false, trigger.value, entries);
+        });
+      }
+      source.addEventListener('change', () => syncChoice(field));
+      const observer = new root.MutationObserver(() => syncChoice(field));
+      observer.observe(source, { attributes: true, subtree: !list, childList: !list,
+        attributeFilter: ['disabled', 'label', 'selected', 'value'] });
+      if (list) observer.observe(list, { childList: true, subtree: true, attributes: true,
+        attributeFilter: ['disabled', 'label', 'value'] });
+      syncChoice(field);
+      return field;
+    }
+
+    const choiceFields = [...doc.querySelectorAll('select, input[list]')].map(installChoice);
 
     byId('target-toggle').addEventListener('click', showTargets); targetInput.addEventListener('click', showTargets);
     byId('frequency-toggle').addEventListener('click', showFrequencies);
@@ -183,17 +326,20 @@
       }
     }));
     doc.addEventListener('pointerdown', event => {
-      if (popup && !popup.contains(event.target) && !anchor.contains(event.target)) close();
+      if (popup && !popup.contains(event.target) && !activeField.control.contains(event.target)) close();
     });
     doc.addEventListener('keydown', event => {
       if (!popup) return;
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); return; }
+      if (event.key === 'Tab' && popup === choiceMenu) { close(true); return; }
       const button = event.target.closest('.picker-option');
       if (!button || !popup.contains(button)) return;
-      const buttons = [...button.parentElement.querySelectorAll('.picker-option')];
+      const buttons = [...button.parentElement.querySelectorAll('.picker-option:not(:disabled)')];
       const index = buttons.indexOf(button);
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault(); buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault(); (event.key === 'Home' ? buttons[0] : buttons.at(-1))?.focus();
       } else if (popup === targetMenu && event.key === 'ArrowRight') {
         event.preventDefault(); const column = button.closest('.target-column'); button.click();
         column.nextElementSibling?.querySelector('.picker-option')?.focus();
@@ -205,8 +351,10 @@
     root.addEventListener('resize', position);
     doc.addEventListener('scroll', event => {
       if (!popup || popup.contains(event.target)) return;
-      const rect = anchor.getBoundingClientRect();
-      if (rect.bottom < 70 || rect.top > root.innerHeight) close();
+      const control = activeField.control;
+      const rect = control.getBoundingClientRect();
+      const clip = control.closest('[data-scroll-area]')?.getBoundingClientRect();
+      if (rect.bottom <= Math.max(0, clip?.top ?? 0) || rect.top >= Math.min(root.innerHeight, clip?.bottom ?? root.innerHeight)) close();
       else position(); // Layout/auto-scroll during catalogue loading must not dismiss the menu.
     }, true);
     return { sync, reload, updateTargets, close, preload() { if (!attempted) return reload(true); },
