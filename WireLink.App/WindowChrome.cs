@@ -8,12 +8,7 @@ public class ChromeForm : Form
 {
     private const int ResizeBorder = 6;
     private CaptionBar? caption;
-
-    [DllImport("user32.dll")]
-    private static extern int ReleaseCapture();
-
-    [DllImport("user32.dll")]
-    private static extern bool PostMessageW(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
+    private (Rectangle Bounds, int Direction, int Dpi)? resizeStart;
 
     private protected void InstallChrome(WindowPalette palette, Action editTheme)
     {
@@ -51,13 +46,22 @@ public class ChromeForm : Form
 
     private protected void BeginEdgeResize(int direction)
     {
-        if (WindowState != FormWindowState.Normal || direction is < 1 or > 8
-            || (MouseButtons & MouseButtons.Left) == 0) return;
-        var point = Cursor.Position;
-        ReleaseCapture();
-        // The host starts the native resize loop after returning from WebView2's message callback.
-        PostMessageW(Handle, 0x00A1, (IntPtr)(direction + 9),
-            (IntPtr)((ushort)point.X | ((int)(ushort)point.Y << 16))); // WM_NCLBUTTONDOWN / HTLEFT through HTBOTTOMRIGHT
+        if (WindowState == FormWindowState.Normal && direction is 1 or 2 or 6 or 7 or 8)
+            resizeStart = (Bounds, direction, DeviceDpi);
+    }
+
+    private protected void MoveEdgeResize(int x, int y, bool finished)
+    {
+        if (resizeStart is not { } start) return;
+        if (finished) resizeStart = null;
+        if (WindowState != FormWindowState.Normal) return;
+        var dx = (int)Math.Round(Math.Clamp(x, -32768, 32768) * start.Dpi / 96d);
+        var dy = (int)Math.Round(Math.Clamp(y, -32768, 32768) * start.Dpi / 96d);
+        var area = start.Bounds;
+        var left = start.Direction is 1 or 7 ? Math.Min(area.Left + dx, area.Right - MinimumSize.Width) : area.Left;
+        var right = start.Direction is 2 or 8 ? Math.Max(area.Right + dx, area.Left + MinimumSize.Width) : area.Right;
+        var bottom = start.Direction is 6 or 7 or 8 ? Math.Max(area.Bottom + dy, area.Top + MinimumSize.Height) : area.Bottom;
+        Bounds = Rectangle.FromLTRB(left, area.Top, right, bottom);
     }
 
     private int ResizeHit(Point point)

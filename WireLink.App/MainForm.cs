@@ -376,6 +376,10 @@ public sealed class MainForm : ChromeForm
                 case "window_resize":
                     BeginEdgeResize(data.GetProperty("direction").GetInt32());
                     break;
+                case "window_resize_move":
+                    MoveEdgeResize(data.GetProperty("x").GetInt32(), data.GetProperty("y").GetInt32(),
+                        data.GetProperty("finished").GetBoolean());
+                    break;
                 case "confirm_result":
                     if (pendingConfirmation is { } confirmation && data.GetProperty("promptId").GetString() == confirmation.Id)
                         confirmation.Completion.TrySetResult(data.GetProperty("accepted").GetBoolean());

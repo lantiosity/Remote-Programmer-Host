@@ -18,6 +18,7 @@ let appearanceDraft = window.WireLinkTheme.appearance();
 let themeSaving = false;
 let themePicking = false;
 let themePreviewTimer;
+let resizeDrag;
 
 function edgeResize(event) {
   if (!window.chrome?.webview || document.documentElement.hasAttribute('data-window-maximized')) return null;
@@ -32,17 +33,45 @@ function edgeResize(event) {
 }
 
 window.addEventListener('pointermove', event => {
+  if (resizeDrag?.pointer === event.pointerId) {
+    resizeDrag.x = event.screenX;
+    resizeDrag.y = event.screenY;
+    if (!resizeDrag.frame) resizeDrag.frame = requestAnimationFrame(() => sendResize(false));
+    return;
+  }
   const cursor = edgeResize(event)?.cursor ?? '';
   const root = document.documentElement;
   if (root.dataset.resizeCursor !== cursor) root.dataset.resizeCursor = cursor;
 }, { passive: true });
 window.addEventListener('pointerdown', event => {
-  const edge = event.button === 0 && edgeResize(event);
+  const edge = !resizeDrag && event.button === 0 && edgeResize(event);
   if (!edge) return;
   event.preventDefault();
   event.stopPropagation();
+  document.documentElement.setPointerCapture(event.pointerId);
+  resizeDrag = { pointer: event.pointerId, startX: event.screenX, startY: event.screenY,
+    x: event.screenX, y: event.screenY, frame: 0 };
   window.chrome.webview.postMessage({ action: 'window_resize', direction: edge.direction });
 }, true);
+window.addEventListener('pointerup', event => {
+  if (resizeDrag?.pointer !== event.pointerId) return;
+  resizeDrag.x = event.screenX;
+  resizeDrag.y = event.screenY;
+  sendResize(true);
+});
+window.addEventListener('lostpointercapture', event => {
+  if (resizeDrag?.pointer === event.pointerId) sendResize(true);
+});
+
+function sendResize(finished) {
+  const { frame, x, y, startX, startY } = resizeDrag;
+  if (finished) {
+    cancelAnimationFrame(frame);
+    resizeDrag = null;
+  } else resizeDrag.frame = 0;
+  window.chrome.webview.postMessage({ action: 'window_resize_move', x: Math.round(x - startX),
+    y: Math.round(y - startY), finished });
+}
 
 function applyTheme(theme, notify = true, colors = state.settings.custom_theme ?? null, effects = state.settings.theme_appearance) {
   theme = window.WireLinkTheme.mode(theme);
