@@ -2,7 +2,7 @@
 
 C# / .NET 8 WinForms + WebView2 远程烧录工作台。支持 USB、WiFi、BLE、目标串口、芯片选择、固件升级及 USB/BLE 配网。固件在独立仓库维护，本仓库不依赖其源码目录。
 
-本版配套 ESP32-S3 固件 **0.1.3**。Windows x64 用户可完整解压 [0.3.0 便携包](release/0.3.0/WireLink-0.3.0-win-x64.7z)，再运行包内的 `WireLink.exe`。ESP32 升级时从对应的固件发布包选择 `esp_swdlink.bin`。
+常规联机功能兼容 ESP32-S3 固件 **0.1.3**。离线烧录需要带面板和 microSD 功能的固件，例如当前的 **0.1.4 开发版**。Windows x64 用户可完整解压 [0.3.0 便携包](release/0.3.0/WireLink-0.3.0-win-x64.7z)，再运行包内的 `WireLink.exe`。ESP32 升级时从对应的固件发布包选择 `esp_swdlink.bin`。
 
 扫描 USB 探针后，在 CMSIS-DAP 序列号下拉列表中选择目标探针。原探针从扫描结果中消失时，相应选择会清空。OTA 则以首次连接读到的序列号为准，重启后核对同一设备的序列号、项目、协议及启动镜像。
 
