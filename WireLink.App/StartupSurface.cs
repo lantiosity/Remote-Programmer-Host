@@ -50,7 +50,7 @@ internal sealed class StartupSurface : Control
         var top = Height / 2f - 90 * scale;
         g.FillEllipse(accent, center - 23 * scale, top, 46 * scale, 46 * scale);
         TextRenderer.DrawText(g, "W", brandFont, new Rectangle((int)(center - 23 * scale), (int)top,
-            (int)(46 * scale), (int)(46 * scale)), palette.Background,
+            (int)(46 * scale), (int)(46 * scale)), WindowPalette.OnColor(palette.Accent),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         TextRenderer.DrawText(g, "WireLink", titleFont, new Rectangle((int)(side + 30 * scale), (int)(top + 65 * scale),
             (int)(Width - side - 60 * scale), (int)(40 * scale)), palette.Text, TextFormatFlags.HorizontalCenter);

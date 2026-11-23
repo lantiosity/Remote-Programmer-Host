@@ -11,10 +11,10 @@ internal sealed class ConfirmationDialog : Form
     private readonly Font bodyFont = new("Microsoft YaHei UI", 10);
     private readonly Font headingFont = new("Microsoft YaHei UI", 14, FontStyle.Bold);
 
-    public ConfirmationDialog(ConfirmationPrompt prompt, bool dark)
+    public ConfirmationDialog(ConfirmationPrompt prompt, bool dark, WindowPalette palette)
     {
         this.dark = dark;
-        palette = WindowPalette.For(dark);
+        this.palette = palette;
         Text = AccessibleName = prompt.Title;
         Font = bodyFont;
         BackColor = palette.Card;
@@ -45,8 +45,8 @@ internal sealed class ConfirmationDialog : Form
         });
 
         var cancel = new DialogButton("取消", DialogResult.Cancel, palette.Header, palette.Text, palette.Border, palette.Accent);
-        var primary = prompt.Destructive ? Color.FromArgb(165, 54, 63) : Color.FromArgb(8, 123, 121);
-        var confirm = new DialogButton(prompt.ConfirmLabel, DialogResult.OK, primary, Color.White, primary, palette.Accent);
+        var primary = prompt.Destructive ? Color.FromArgb(165, 54, 63) : palette.Primary;
+        var confirm = new DialogButton(prompt.ConfirmLabel, DialogResult.OK, primary, WindowPalette.OnColor(primary), primary, palette.Accent);
         var actions = new FlowLayoutPanel
         {
             Anchor = AnchorStyles.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,

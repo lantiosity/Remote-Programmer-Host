@@ -19,6 +19,7 @@ public sealed class MainForm : ChromeForm
     private readonly StartupSurface startupSurface;
     private readonly StartupTrace startup = new();
     private bool dark;
+    private WindowPalette appearance = WindowPalette.For(false);
     private bool presented;
     private readonly string root = FindRoot();
     private readonly string configPath;
@@ -67,7 +68,7 @@ public sealed class MainForm : ChromeForm
         dfps = new(root);
         offline = new(Path.Combine(root, "data", "offline"));
         dark = WindowAppearance.IsDark(settings.Theme);
-        var palette = WindowPalette.For(dark);
+        var palette = appearance = WindowPalette.For(dark, settings.CustomTheme);
         BackColor = palette.Background;
         // Set before creating the browser surface, including its first compositor frame.
         Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", palette.Background.ToArgb().ToString("X8"));
@@ -86,7 +87,7 @@ public sealed class MainForm : ChromeForm
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        WindowAppearance.ApplyFrame(Handle, dark, WindowPalette.For(dark));
+        WindowAppearance.ApplyFrame(Handle, dark, appearance);
     }
 
     protected override void OnLoad(EventArgs e)
@@ -96,10 +97,10 @@ public sealed class MainForm : ChromeForm
         _ = InitializeAsync();
     }
 
-    private void ApplyAppearance(bool isDark)
+    private void ApplyAppearance(bool isDark, ThemeColors? custom)
     {
         dark = isDark;
-        var palette = WindowPalette.For(dark);
+        var palette = appearance = WindowPalette.For(dark, custom);
         BackColor = palette.Background;
         content.BackColor = palette.Background;
         ApplyChromePalette(palette);
@@ -249,7 +250,7 @@ public sealed class MainForm : ChromeForm
 
     private void Persist(Settings value)
     {
-        settings = value;
+        settings = value with { CustomTheme = settings.CustomTheme };
         try { settings.Save(configPath); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log("配置保存失败，请检查 data 目录写入权限：" + ex.Message); }
     }
@@ -284,7 +285,15 @@ public sealed class MainForm : ChromeForm
                     break;
                 case "save": Persist(value with { Pack = settings.Pack }); break;
                 case "theme":
-                    ApplyAppearance(data.GetProperty("dark").GetBoolean());
+                    ApplyAppearance(data.GetProperty("dark").GetBoolean(), data.GetProperty("colors").Deserialize<ThemeColors>(Settings.Json));
+                    break;
+                case "theme_save":
+                    var colors = data.GetProperty("colors").Deserialize<ThemeColors>(Settings.Json);
+                    if (colors != null && ThemeColors.Validated(colors) == null) throw new ArgumentException("主题颜色格式无效");
+                    var themed = settings with { Theme = value.Theme, CustomTheme = colors };
+                    themed.Save(configPath);
+                    settings = themed;
+                    ApplyAppearance(data.GetProperty("dark").GetBoolean(), colors);
                     break;
                 case "browse": await BrowseAsync(data.GetProperty("key").GetString()!); break;
                 case "pack_import":
@@ -400,7 +409,7 @@ public sealed class MainForm : ChromeForm
             // Let the WebView event return before ShowDialog enters its modal message loop.
             await Task.Yield();
             if (IsDisposed) return false;
-            using var dialog = new ConfirmationDialog(prompt, dark);
+            using var dialog = new ConfirmationDialog(prompt, dark, appearance);
             return dialog.ShowDialog(this) == DialogResult.OK;
         }
         finally { confirming = false; }
