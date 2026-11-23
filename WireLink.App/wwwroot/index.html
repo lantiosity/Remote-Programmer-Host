@@ -174,21 +174,22 @@
   <dialog id="ble-picker" data-scroll-area="蓝牙设备窗口"><div class="dialog-heading"><h2>选择蓝牙烧录器</h2><button class="text-button" id="close-picker">✕</button></div><div id="ble-devices" data-scroll-area="蓝牙设备列表"></div><p class="hint">同名设备请根据地址选择。</p></dialog>
   <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description">
     <div class="dialog-heading"><h2 id="theme-title">自定义主题</h2></div>
-    <p id="theme-description">更改会实时预览。背景和卡片色调随浅色或深色模式调整。</p>
+    <p id="theme-description">更改会实时预览。不透明度只作用于背景，0% 全透，100% 实色。</p>
     <div class="theme-colors">
       <label>强调色<input type="color" data-theme-color="accent" value="#087f80"><output data-theme-value="accent"></output></label>
       <label>工作区色调<input type="color" data-theme-color="background" value="#f5f7fb"><output data-theme-value="background"></output></label>
       <label>卡片色调<input type="color" data-theme-color="surface" value="#ffffff"><output data-theme-value="surface"></output></label>
     </div>
     <div class="theme-effects">
-      <label class="theme-range">窗口不透明度<input id="theme-opacity" type="range" min="50" max="100" value="100"><output id="theme-opacity-value">100%</output></label>
+      <label class="theme-range">窗口背景不透明度<input id="theme-opacity" type="range" min="0" max="100" value="100"><output id="theme-opacity-value">100%</output></label>
+      <label class="theme-range">卡片背景不透明度<input id="theme-card-opacity" type="range" min="0" max="100" value="88"><output id="theme-card-opacity-value">88%</output></label>
       <div class="theme-image-row">
         <span>背景图片 <small id="theme-image-state">未设置</small></span>
         <button type="button" id="theme-pick-image" class="button">选择图片…</button>
         <button type="button" id="theme-clear-image" class="text-button">移除</button>
       </div>
       <label class="theme-range">图片强度<input id="theme-image-opacity" type="range" min="0" max="100" value="45"><output id="theme-image-opacity-value">45%</output></label>
-      <label class="checkbox theme-frosted"><input id="theme-frosted" type="checkbox"><span>毛玻璃 · 模糊卡片背后的工作区背景</span></label>
+      <label class="checkbox theme-frosted"><input id="theme-frosted" type="checkbox"><span>窗口和卡片使用毛玻璃</span></label>
     </div>
     <p id="theme-error" role="alert" hidden></p>
     <div class="theme-actions">

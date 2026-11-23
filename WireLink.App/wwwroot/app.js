@@ -47,6 +47,8 @@ function showThemeInputs() {
   });
   $('#theme-opacity').value = appearanceDraft.opacity;
   $('#theme-opacity-value').textContent = `${appearanceDraft.opacity}%`;
+  $('#theme-card-opacity').value = appearanceDraft.card_opacity;
+  $('#theme-card-opacity-value').textContent = `${appearanceDraft.card_opacity}%`;
   $('#theme-image-opacity').value = appearanceDraft.image_opacity;
   $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
   $('#theme-frosted').checked = appearanceDraft.frosted;
@@ -86,10 +88,16 @@ themeInputs.forEach(input => {
 $('#theme-opacity').addEventListener('input', event => {
   appearanceDraft.opacity = Number(event.target.value);
   $('#theme-opacity-value').textContent = `${appearanceDraft.opacity}%`;
+  previewTheme(false);
   if (themePreviewTimer == null) themePreviewTimer = setTimeout(() => {
     themePreviewTimer = null;
     if (themeEditor.open) previewTheme();
   }, 40);
+});
+$('#theme-card-opacity').addEventListener('input', event => {
+  appearanceDraft.card_opacity = Number(event.target.value);
+  $('#theme-card-opacity-value').textContent = `${appearanceDraft.card_opacity}%`;
+  previewTheme(false);
 });
 $('#theme-image-opacity').addEventListener('input', event => {
   appearanceDraft.image_opacity = Number(event.target.value);
@@ -98,7 +106,7 @@ $('#theme-image-opacity').addEventListener('input', event => {
 });
 $('#theme-frosted').addEventListener('change', event => {
   appearanceDraft.frosted = event.target.checked;
-  previewTheme(false);
+  previewTheme();
 });
 $('#theme-pick-image').addEventListener('click', async () => {
   if (themePicking) return;
@@ -226,6 +234,7 @@ function lockControls() {
   $('#serial-toggle').textContent = state.serial === 'connected' ? '关闭连接' : state.serial === 'opening' ? '正在连接…' : '打开连接';
   $('#send').disabled = state.serial !== 'connected';
   lockOfflineControls();
+  lockThemeControls();
 }
 
 function log(text) {

@@ -16,7 +16,7 @@ function scan(selection, ids) {
   const matchMedia = () => ({ addEventListener() {}, matches: false });
   const context = {
     document: {
-      documentElement: { dataset: {}, style: {}, toggleAttribute() {} },
+      documentElement: { dataset: {}, style: { setProperty() {} }, toggleAttribute() {} },
       querySelector: selector => selector === '[data-setting="usb_id"]' ? input : element,
       querySelectorAll: () => [], getElementById: () => list, createElement: () => ({})
     },
