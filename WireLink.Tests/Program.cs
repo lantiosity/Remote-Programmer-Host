@@ -214,6 +214,7 @@ AsyncTest("USB 配网长命令正确分片且响应按偏移完整重组", async
 });
 
 ReviewTests.Register(tests);
+LocalLibraryTests.Register(tests, temp);
 var failures = 0;
 try
 {
