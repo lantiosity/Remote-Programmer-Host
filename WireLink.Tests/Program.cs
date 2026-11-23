@@ -109,12 +109,12 @@ Test("深色主题保存并恢复，兼容旧配置和损坏文件", () =>
 {
     var path = Path.Combine(temp, "settings.json");
     var colors = new ThemeColors("#CD80F1", "#141827", "#304662");
-    var effects = new ThemeAppearance(73, 61, "0123456789abcdef0123456789abcdef", Frosted: true);
+    var effects = new ThemeAppearance(0, 61, "0123456789abcdef0123456789abcdef", Frosted: true, CardOpacity: 0);
     (settings with { Theme = "dark", CustomTheme = colors, ThemeAppearance = effects }).Save(path);
     var loaded = Settings.Load(path);
     Check(loaded.Theme == "dark" && ThemeColors.Validated(loaded.CustomTheme) == colors);
     Check(loaded.ThemeAppearance == effects && loaded.ThemeAppearance.Normalize() == effects);
-    Check(new ThemeAppearance(0, 400, "../image.png").Normalize() == new ThemeAppearance(50, 100));
+    Check(new ThemeAppearance(-1, 400, "../image.png", CardOpacity: 400).Normalize() == new ThemeAppearance(0, 100, CardOpacity: 100));
     Check(ThemeColors.Validated(colors with { Accent = "#12ZZ99" }) == null);
     (loaded with { CustomTheme = null }).Save(path);
     Check(Settings.Load(path).CustomTheme == null);

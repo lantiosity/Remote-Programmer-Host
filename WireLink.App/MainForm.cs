@@ -21,6 +21,9 @@ public sealed class MainForm : ChromeForm
     private bool dark;
     private WindowPalette appearance = WindowPalette.For(false);
     private bool presented;
+    private bool desktopBackdrop;
+    private bool? acrylic;
+    private ThemeAppearance displayedEffects = new();
     private readonly string root = FindRoot();
     private readonly string configPath;
     private readonly PyOcdService pyocd;
@@ -73,6 +76,7 @@ public sealed class MainForm : ChromeForm
         {
             ThemeAppearance = backgrounds.Exists(savedAppearance.Image) ? savedAppearance : savedAppearance with { Image = null }
         };
+        displayedEffects = settings.ThemeAppearance;
         dfps = new(root);
         offline = new(Path.Combine(root, "data", "offline"));
         dark = WindowAppearance.IsDark(settings.Theme);
@@ -87,7 +91,6 @@ public sealed class MainForm : ChromeForm
         content.Controls.Add(startupSurface);
         Controls.Add(content);
         InstallChrome(palette, OpenThemeEditor);
-        Opacity = settings.ThemeAppearance.Opacity / 100d;
         startupSurface.BringToFront();
         pyocd = new(root, Log);
         startup.Mark("form_created");
@@ -98,6 +101,9 @@ public sealed class MainForm : ChromeForm
     {
         base.OnHandleCreated(e);
         WindowAppearance.ApplyFrame(Handle, dark, appearance);
+        desktopBackdrop = WindowAppearance.EnableDesktopBackdrop(Handle);
+        acrylic = null;
+        SetWindowBackdrop(displayedEffects);
     }
 
     protected override void OnLoad(EventArgs e)
@@ -114,14 +120,29 @@ public sealed class MainForm : ChromeForm
         {
             dark = isDark;
             appearance = palette;
-            content.BackColor = palette.Background;
             ApplyChromePalette(palette);
-            web.DefaultBackgroundColor = palette.Background;
+            if (!desktopBackdrop || !presented)
+                content.BackColor = web.DefaultBackgroundColor = palette.Background;
             if (!startupSurface.IsDisposed) startupSurface.ApplyPalette(palette);
             WindowAppearance.ApplyFrame(Handle, dark, palette);
         }
-        var opacity = effects.Opacity / 100d;
-        if (Math.Abs(Opacity - opacity) >= .005) Opacity = opacity;
+        SetWindowBackdrop(effects);
+    }
+
+    private void SetWindowBackdrop(ThemeAppearance effects)
+    {
+        displayedEffects = effects;
+        if (!desktopBackdrop) return;
+        var translucent = effects.Opacity < 100;
+        if (presented)
+        {
+            BackColor = translucent ? Color.Black : appearance.Header;
+            SetCaptionOpacity(effects.Opacity);
+        }
+        var enabled = effects.Frosted && translucent;
+        if (acrylic == enabled) return;
+        acrylic = enabled;
+        WindowAppearance.SetDesktopAcrylic(Handle, enabled);
     }
 
     private void PresentWorkbench(string source)
@@ -131,6 +152,12 @@ public sealed class MainForm : ChromeForm
         startupSurface.Visible = false;
         content.Controls.Remove(startupSurface);
         startupSurface.Dispose();
+        if (desktopBackdrop)
+        {
+            content.BackColor = Color.Black;
+            web.DefaultBackgroundColor = Color.Transparent;
+            SetWindowBackdrop(displayedEffects);
+        }
         web.BringToFront();
         startup.Mark("workbench_revealed");
         startup.Save(root, source);
@@ -200,7 +227,7 @@ public sealed class MainForm : ChromeForm
             core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
             core.WebMessageReceived += MessageReceivedAsync;
             // Theme is available before the document's styles or deferred app script run.
-            await core.AddScriptToExecuteOnDocumentCreatedAsync("window.__wirelinkSettings = "
+            await core.AddScriptToExecuteOnDocumentCreatedAsync($"window.__wirelinkDesktopBackdrop = {(desktopBackdrop ? "true" : "false")}; window.__wirelinkSettings = "
                 + JsonSerializer.Serialize(settings, Settings.Json) + ";");
             if (closing || IsDisposed) return;
             startupSurface.Status = "正在载入工作台…";

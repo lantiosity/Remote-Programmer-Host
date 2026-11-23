@@ -14,13 +14,13 @@ public sealed record ThemeColors(string Accent, string Background, string Surfac
         && value.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") < 0;
 }
 
-public sealed record ThemeAppearance(int Opacity = 100, int ImageOpacity = 45, string? Image = null, bool Frosted = false)
+public sealed record ThemeAppearance(int Opacity = 100, int ImageOpacity = 45, string? Image = null,
+    bool Frosted = false, int CardOpacity = 88)
 {
-    public const int MinimumOpacity = 50;
     public static bool IsImageId(string? id) => id is { Length: 32 } && id.AsSpan().IndexOfAnyExcept("0123456789abcdef") < 0;
 
-    public ThemeAppearance Normalize() => new(Math.Clamp(Opacity, MinimumOpacity, 100),
-        Math.Clamp(ImageOpacity, 0, 100), IsImageId(Image) ? Image : null, Frosted);
+    public ThemeAppearance Normalize() => new(Math.Clamp(Opacity, 0, 100),
+        Math.Clamp(ImageOpacity, 0, 100), IsImageId(Image) ? Image : null, Frosted, Math.Clamp(CardOpacity, 0, 100));
 }
 
 public sealed record Settings

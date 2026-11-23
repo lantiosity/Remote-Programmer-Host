@@ -25,6 +25,8 @@ public class ChromeForm : Form
         caption?.ApplyPalette(palette);
     }
 
+    private protected void SetCaptionOpacity(int opacity) => caption?.SetBackgroundOpacity(opacity);
+
     protected override CreateParams CreateParams
     {
         get
@@ -104,6 +106,7 @@ internal sealed class CaptionBar : Control
     private readonly CaptionButton theme, maximize;
     private readonly ToolTip tips = new();
     private WindowPalette palette;
+    private int backgroundOpacity = 100;
 
     public CaptionBar(Form owner, WindowPalette palette, Action editTheme)
     {
@@ -124,6 +127,15 @@ internal sealed class CaptionBar : Control
     {
         palette = value;
         foreach (var button in buttons) button.ApplyPalette(value);
+        Invalidate();
+    }
+
+    public void SetBackgroundOpacity(int opacity)
+    {
+        if (backgroundOpacity == opacity) return;
+        backgroundOpacity = opacity;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer, opacity == 100);
+        foreach (var button in buttons) button.SetBackgroundOpacity(opacity);
         Invalidate();
     }
 
@@ -161,7 +173,12 @@ internal sealed class CaptionBar : Control
         base.Dispose(disposing);
     }
 
-    protected override void OnPaint(PaintEventArgs e) => e.Graphics.Clear(palette.Header);
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        if (backgroundOpacity < 100 && WindowAppearance.PaintWithAlpha(e.Graphics, ClientRectangle,
+            graphics => graphics.Clear(Color.FromArgb(backgroundOpacity * 255 / 100, palette.Header)))) return;
+        e.Graphics.Clear(palette.Header);
+    }
 
     protected override void WndProc(ref Message message)
     {
@@ -177,6 +194,7 @@ internal sealed class CaptionButton : Button
 {
     private WindowPalette palette;
     private bool hover;
+    private int backgroundOpacity = 100;
     public CaptionGlyph Glyph { get; set; }
 
     public CaptionButton(string accessibleName, CaptionGlyph glyph, WindowPalette palette, Action action)
@@ -189,6 +207,12 @@ internal sealed class CaptionButton : Button
     }
 
     public void ApplyPalette(WindowPalette value) { palette = value; Invalidate(); }
+    public void SetBackgroundOpacity(int opacity)
+    {
+        backgroundOpacity = opacity;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer, opacity == 100);
+        Invalidate();
+    }
     protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
     protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; Invalidate(); }
     protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
@@ -197,30 +221,37 @@ internal sealed class CaptionButton : Button
     protected override void OnPaint(PaintEventArgs e)
     {
         var background = hover ? Glyph == CaptionGlyph.Close ? Color.FromArgb(200, 51, 64) : palette.Border : palette.Header;
-        e.Graphics.Clear(background);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        if (backgroundOpacity < 100 && WindowAppearance.PaintWithAlpha(e.Graphics, ClientRectangle,
+            graphics => PaintGlyph(graphics, hover ? background : Color.FromArgb(backgroundOpacity * 255 / 100, background)))) return;
+        PaintGlyph(e.Graphics, background);
+    }
+
+    private void PaintGlyph(Graphics graphics, Color background)
+    {
+        graphics.Clear(background);
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var scale = DeviceDpi / 96f;
         var size = 10 * scale; var x = (Width - size) / 2; var y = (Height - size) / 2;
         using var pen = new Pen(hover && Glyph == CaptionGlyph.Close ? Color.White : palette.Text, Math.Max(1, scale));
         switch (Glyph)
         {
-            case CaptionGlyph.Theme: DrawPalette(e.Graphics, pen, scale); break;
-            case CaptionGlyph.Minimize: e.Graphics.DrawLine(pen, x, y + size / 2, x + size, y + size / 2); break;
-            case CaptionGlyph.Maximize: e.Graphics.DrawRectangle(pen, x, y, size, size); break;
+            case CaptionGlyph.Theme: DrawPalette(graphics, pen, scale); break;
+            case CaptionGlyph.Minimize: graphics.DrawLine(pen, x, y + size / 2, x + size, y + size / 2); break;
+            case CaptionGlyph.Maximize: graphics.DrawRectangle(pen, x, y, size, size); break;
             case CaptionGlyph.Restore:
-                e.Graphics.DrawLines(pen, new PointF[] { new(x + 3 * scale, y + 2 * scale), new(x + 3 * scale, y), new(x + size, y), new(x + size, y + size - 3 * scale) });
-                e.Graphics.DrawRectangle(pen, x, y + 3 * scale, size - 3 * scale, size - 3 * scale);
+                graphics.DrawLines(pen, new PointF[] { new(x + 3 * scale, y + 2 * scale), new(x + 3 * scale, y), new(x + size, y), new(x + size, y + size - 3 * scale) });
+                graphics.DrawRectangle(pen, x, y + 3 * scale, size - 3 * scale, size - 3 * scale);
                 break;
             default:
-                e.Graphics.DrawLine(pen, x, y, x + size, y + size);
-                e.Graphics.DrawLine(pen, x + size, y, x, y + size);
+                graphics.DrawLine(pen, x, y, x + size, y + size);
+                graphics.DrawLine(pen, x + size, y, x, y + size);
                 break;
         }
         if (Focused && ShowFocusCues)
         {
             var inset = LogicalToDeviceUnits(3);
             using var focus = new Pen(palette.Text, Math.Max(1, scale));
-            e.Graphics.DrawRectangle(focus, inset, inset, Width - 2 * inset - 1, Height - 2 * inset - 1);
+            graphics.DrawRectangle(focus, inset, inset, Width - 2 * inset - 1, Height - 2 * inset - 1);
         }
     }
 

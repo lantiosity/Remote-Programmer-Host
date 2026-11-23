@@ -58,6 +58,64 @@ internal static class WindowAppearance
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr handle, int attribute, ref int value, int size);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr handle, ref FrameMargins margins);
+
+    [DllImport("uxtheme.dll")]
+    private static extern IntPtr BeginBufferedPaint(IntPtr dc, ref PaintRect rect, int format,
+        IntPtr parameters, out IntPtr bufferDc);
+
+    [DllImport("uxtheme.dll")]
+    private static extern int EndBufferedPaint(IntPtr buffer, [MarshalAs(UnmanagedType.Bool)] bool update);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PaintRect(Rectangle bounds)
+    {
+        public int Left = bounds.Left, Top = bounds.Top, Right = bounds.Right, Bottom = bounds.Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FrameMargins(int inset)
+    {
+        public int Left = inset, Right = inset, Top = inset, Bottom = inset;
+    }
+
+    public static bool SupportsDesktopBackdrop => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)
+        && !SystemInformation.HighContrast;
+
+    public static bool EnableDesktopBackdrop(IntPtr handle)
+    {
+        if (!SupportsDesktopBackdrop) return false;
+        var margins = new FrameMargins(-1);
+        return DwmExtendFrameIntoClientArea(handle, ref margins) >= 0;
+    }
+
+    public static void SetDesktopAcrylic(IntPtr handle, bool enabled)
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621)) return;
+        var backdrop = enabled ? 3 : 1; // DWMSBT_TRANSIENTWINDOW (Desktop Acrylic) / DWMSBT_NONE.
+        DwmSetWindowAttribute(handle, 38, ref backdrop, sizeof(int));
+    }
+
+    public static bool PaintWithAlpha(Graphics target, Rectangle bounds, Action<Graphics> paint)
+    {
+        var dc = target.GetHdc();
+        try
+        {
+            var rect = new PaintRect(bounds);
+            var buffer = BeginBufferedPaint(dc, ref rect, 2, IntPtr.Zero, out var bufferDc); // BPBF_TOPDOWNDIB
+            if (buffer == IntPtr.Zero) return false;
+            try
+            {
+                using var graphics = Graphics.FromHdc(bufferDc);
+                paint(graphics);
+            }
+            finally { EndBufferedPaint(buffer, true); }
+            return true;
+        }
+        finally { target.ReleaseHdc(dc); }
+    }
+
     public static bool IsDark(string? preference)
     {
         if (preference == "dark") return true;
