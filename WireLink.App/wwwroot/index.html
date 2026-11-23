@@ -71,7 +71,20 @@
   </aside>
 
   <main>
-    <header><div class="breadcrumb">工作空间 <span>/</span> <b id="breadcrumb">目标芯片烧录</b></div><div class="header-tools"><label class="theme-picker"><span id="theme-icon" aria-hidden="true">◐</span><select data-setting="theme" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label><div class="status-pill" id="status"><i></i><span>就绪</span></div></div></header>
+    <header class="workbench-header">
+      <div class="breadcrumb">工作空间 <span>/</span> <b id="breadcrumb">目标芯片烧录</b></div>
+      <div class="window-drag" aria-hidden="true"></div>
+      <div class="header-tools">
+        <label class="theme-picker"><span id="theme-icon" aria-hidden="true">◐</span><select data-setting="theme" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label>
+        <div class="status-pill" id="status"><i></i><span>就绪</span></div>
+        <div class="window-controls" role="group" aria-label="窗口控制">
+          <button type="button" id="open-theme" title="自定义主题" aria-label="自定义主题"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 0 0 0 15h1.2a1.7 1.7 0 0 0 1-3.1 1 1 0 0 1 .6-1.9h1.4A3.3 3.3 0 0 0 17.5 9 7.5 7.5 0 0 0 10 2.5Z"/><path stroke-linecap="round" d="M6.3 9h.01m2.3-3h.01m3.8.7h.01"/></svg></button>
+          <button type="button" data-window-action="minimize" title="最小化" aria-label="最小化"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12"/></svg></button>
+          <button type="button" data-window-action="maximize" title="最大化" aria-label="最大化"><svg class="window-maximize-glyph" viewBox="0 0 20 20" aria-hidden="true"><rect x="4.5" y="4.5" width="11" height="11"/></svg><svg class="window-restore-glyph" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 7V4.5h8.5V13H13"/><rect x="4.5" y="7" width="8.5" height="8.5"/></svg></button>
+          <button type="button" data-window-action="close" title="关闭" aria-label="关闭"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+        </div>
+      </div>
+    </header>
     <div class="workspace" data-scroll-area="工作区">
       <section class="page" id="page-flash">
         <div class="page-heading"><div><div class="eyebrow">PROGRAM YOUR TARGET</div><h1>目标芯片烧录<span class="heading-dot">.</span></h1><p>从固件到设备，通过你选择的链路。</p></div><span class="chip-badge">SWD <span>CONNECTED WORKFLOW</span></span></div>
@@ -180,7 +193,7 @@
       <button type="button" class="button primary" id="confirm-accept">确认</button>
     </div>
   </dialog>
-  <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description">
+  <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description" data-scroll-area="主题设置">
     <div class="dialog-heading"><h2 id="theme-title">自定义主题</h2></div>
     <p id="theme-description">更改会实时预览。不透明度只调背景底色，弹窗跟随窗口背景。</p>
     <div class="theme-colors">
@@ -190,7 +203,10 @@
     </div>
     <div class="theme-effects">
       <label class="theme-range">窗口背景不透明度<input id="theme-opacity" type="range" min="0" max="100" value="100"><output id="theme-opacity-value">100%</output></label>
+      <label class="theme-range">侧边栏背景不透明度<input id="theme-sidebar-opacity" type="range" min="0" max="100" value="100"><output id="theme-sidebar-opacity-value">100%</output></label>
       <label class="theme-range">卡片背景不透明度<input id="theme-card-opacity" type="range" min="0" max="100" value="88"><output id="theme-card-opacity-value">88%</output></label>
+      <label class="theme-range">控件相对透明度<input id="theme-control-transparency" type="range" min="0" max="100" value="0" aria-describedby="theme-control-result"><output id="theme-control-transparency-value">0%</output></label>
+      <p id="theme-control-result" class="theme-effect-detail"></p>
       <div class="theme-image-row">
         <span>背景图片 <small id="theme-image-state">未设置</small></span>
         <button type="button" id="theme-pick-image" class="button">选择图片…</button>
@@ -199,6 +215,7 @@
       <label class="theme-range">图片强度<input id="theme-image-opacity" type="range" min="0" max="100" value="45"><output id="theme-image-opacity-value">45%</output></label>
       <label class="theme-switch"><span>窗口亚克力</span><input type="checkbox" role="switch" data-theme-switch="window_acrylic"></label>
       <label class="theme-switch"><span>未聚焦时保留窗口亚克力</span><input type="checkbox" role="switch" data-theme-switch="keep_acrylic_when_inactive"></label>
+      <label class="theme-switch"><span>侧边栏毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="sidebar_frosted"></label>
       <label class="theme-switch"><span>卡片毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="card_frosted"></label>
     </div>
     <p id="theme-error" role="alert" hidden></p>

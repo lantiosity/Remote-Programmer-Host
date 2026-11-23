@@ -48,6 +48,15 @@ html[data-theme] {
   --surface-muted: #455870;
   --text-halo: #f8fbffca;
   --switch-off: #546981;
+  --control-surface: #fff;
+  --control-hover: #edf3f8;
+  --control-alt: #f6f8fb;
+  --control-disabled: #e8eef4;
+  --control-outline: #54698190;
+  --control-active: #087f80;
+  --control-active-hover: #07696a;
+  --control-active-ink: #fff;
+  --control-danger: #8b2730;
 }
 html[data-theme="dark"] {
   --layer-surface: #192433;
@@ -61,11 +70,23 @@ html[data-theme="dark"] {
   --surface-muted: #bbcee4;
   --text-halo: #07121fdf;
   --switch-off: #5c738d;
+  --control-surface: #131d2a;
+  --control-hover: #2b3c51;
+  --control-alt: #243246;
+  --control-disabled: #182435;
+  --control-outline: #a7bed4a0;
+  --control-active: #15867f;
+  --control-active-hover: #1a9c92;
+  --control-active-ink: #f3fffc;
+  --control-danger: #ffb7b9;
 }
 html[data-custom-theme] {
   --layer-surface: var(--ui-surface);
   --layer-sidebar: var(--ui-sidebar);
   --layer-header: var(--ui-header);
+  --control-active: var(--ui-accent);
+  --control-active-hover: var(--ui-accent-hover);
+  --control-active-ink: var(--ui-button-ink);
 }
 
 html[data-theme]:not([data-desktop-backdrop]) {
@@ -73,6 +94,15 @@ html[data-theme]:not([data-desktop-backdrop]) {
 }
 html[data-theme] body {
   isolation: isolate;
+  background: transparent;
+}
+html[data-theme] main { position: relative; }
+html[data-theme] main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
   background: color-mix(in srgb, var(--bg) var(--window-opacity), transparent);
 }
 html:not([data-window-maximized]) .workspace { margin-inline-end: 6px; }
@@ -95,7 +125,10 @@ html[data-window-acrylic][data-wallpaper]:is(:not([data-window-inactive]), [data
   filter: blur(.65rem) saturate(1.12);
 }
 html[data-theme] .sidebar {
-  background: color-mix(in srgb, var(--layer-sidebar) var(--window-opacity), transparent);
+  background: color-mix(in srgb, var(--layer-sidebar) var(--sidebar-opacity), transparent);
+}
+html[data-sidebar-frosted] .sidebar {
+  backdrop-filter: blur(1rem) saturate(1.12);
 }
 html[data-theme] main > header {
   background: color-mix(in srgb, var(--layer-header) var(--window-opacity), transparent);
@@ -106,6 +139,99 @@ html[data-theme] .workspace .card {
 html[data-card-frosted] .workspace .card {
   backdrop-filter: blur(1rem) saturate(1.12);
 }
+
+.workbench-header {
+  position: relative;
+  padding-inline-end: .625rem;
+}
+.window-drag {
+  position: absolute;
+  inset: .375rem .375rem 0;
+  app-region: drag;
+}
+.workbench-header .header-tools {
+  position: relative;
+  app-region: no-drag;
+}
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: .125rem;
+}
+.window-controls button {
+  display: grid;
+  place-items: center;
+  width: 2.375rem;
+  height: 2.125rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: .375rem;
+  background: transparent;
+  color: var(--ink);
+}
+.window-controls button:hover { background: var(--control-hover); }
+.window-controls button:focus-visible { outline: 2px solid var(--theme-control-focus, var(--primary)); }
+.window-controls button[data-window-action="close"]:hover { color: #fff; background: #a5363f; }
+.window-controls svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.4; }
+html[data-window-translucent] .window-controls button:not(:hover) svg { filter: drop-shadow(0 0 .12rem var(--text-halo)); }
+.window-controls .window-restore-glyph,
+[data-window-maximized] .window-controls .window-maximize-glyph { display: none; }
+[data-window-maximized] .window-controls .window-restore-glyph { display: block; }
+
+html[data-theme] :is(
+  input:not([type="range"], [type="checkbox"]), select, .button, .file-input button,
+  .file-input, .picker-control, .firmware-picker, .segmented, .segmented button.selected, .ble-device, .checkbox input
+) {
+  background-color: color-mix(in srgb, var(--control-fill, var(--control-surface)) var(--control-opacity), transparent);
+}
+html[data-theme] :is(.button, .file-input button, .firmware-picker, .segmented, .ble-device) {
+  --control-fill: var(--control-alt);
+}
+html[data-theme] :is(input:disabled, select:disabled, .picker-control:has(input:disabled)) {
+  --control-fill: var(--control-disabled);
+}
+html[data-theme] :is(.button:hover, .file-input button:hover, .ble-device:hover) {
+  --control-fill: var(--control-hover);
+}
+html[data-theme] :is(.button.primary, .checkbox input:checked) {
+  --control-fill: var(--control-active);
+}
+html[data-theme] .button.primary {
+  color: var(--control-active-ink);
+  border-color: var(--control-active);
+}
+html[data-theme] .button.primary:hover {
+  --control-fill: var(--control-active-hover);
+  background-color: color-mix(in srgb, var(--control-fill) var(--control-opacity), transparent);
+}
+html[data-theme][data-control-translucent] .button.primary { color: var(--surface-text); }
+html[data-theme][data-control-translucent] .segmented button.selected {
+  box-shadow: inset 0 0 0 1px var(--control-outline);
+}
+html[data-theme] .workspace-nav .nav-item[aria-current="page"] {
+  background-color: color-mix(in srgb, var(--nav-selected) var(--control-opacity), transparent);
+}
+html[data-theme][data-control-translucent] .workspace-nav .nav-item[aria-current="page"] {
+  box-shadow: inset 0 0 0 1px var(--control-outline);
+}
+html[data-sidebar-translucent] .workspace-nav .nav-item:not([aria-current="page"]) { color: var(--surface-text); }
+html[data-theme][data-control-translucent] :is(.button:not(.primary), input:not([type="range"]), select, .file-input, .picker-control, .firmware-picker) {
+  border-color: var(--control-outline);
+  text-shadow: 0 0 .13rem var(--text-halo);
+}
+html[data-theme][data-control-translucent] .checkbox input:checked::after { border-color: var(--surface-text); }
+html[data-theme] :is(.picker-control, .file-input) > input {
+  background: transparent;
+  backdrop-filter: none;
+}
+html[data-theme] .theme-picker select { background: transparent; border-color: transparent; }
+html[data-card-frosted] :is(
+  input:not([type="range"]), select, .button, .file-input button, .file-input,
+  .picker-control, .firmware-picker, .segmented, .ble-device, .nav-item[aria-current="page"]
+) {
+  backdrop-filter: blur(.55rem);
+}
+html[data-card-frosted] :is(.picker-control, .file-input) > input { backdrop-filter: none; }
 html[data-theme] :is(dialog, .picker-popup) {
   background: color-mix(in srgb, var(--layer-surface) var(--window-opacity), transparent);
   box-shadow: 0 1rem 3rem var(--layer-shadow);
@@ -128,11 +254,12 @@ html[data-theme] :is(.hint, .muted, .optional, .brand small, .section-label, .si
 html[data-theme] #elapsed,
 html[data-theme] input::placeholder,
 html[data-theme] .wiring summary::before { color: var(--surface-muted); }
-html[data-window-translucent] :is(.sidebar, main, dialog, .picker-popup),
+html[data-window-translucent] :is(main, dialog, .picker-popup),
+html[data-sidebar-translucent] .sidebar,
 html[data-card-translucent] .workspace .card {
   text-shadow: 0 0 .12rem var(--text-halo), 0 .045rem .075rem var(--text-halo);
 }
-html[data-window-translucent] .workspace-nav svg { filter: drop-shadow(0 0 .07rem var(--text-halo)); }
+html[data-sidebar-translucent] .workspace-nav svg { filter: drop-shadow(0 0 .07rem var(--text-halo)); }
 html[data-window-translucent] :is(.button, input, #logs, #terminal, .notice, .step, .chip-badge, .status-pill) {
   text-shadow: none;
 }
@@ -146,11 +273,13 @@ html[data-window-translucent] :is(.button, input, #logs, #terminal, .notice, .st
 #confirm-message { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin: 0; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.25rem; }
 html[data-theme] #confirm-accept.confirm-destructive {
-  background: #a5363f;
+  --control-fill: #a5363f;
+  background-color: color-mix(in srgb, var(--control-fill) var(--control-opacity), transparent);
   border-color: #a5363f;
   color: #fff;
 }
-html[data-theme] #confirm-accept.confirm-destructive:hover { background: #882832; }
+html[data-theme] #confirm-accept.confirm-destructive:hover { --control-fill: #882832; }
+html[data-theme][data-control-translucent] #confirm-accept.confirm-destructive { color: var(--control-danger); }
 
 #theme-description {
   margin: 0 0 1rem;
@@ -176,7 +305,7 @@ html[data-theme] #confirm-accept.confirm-destructive:hover { background: #882832
 .theme-colors output { font-family: var(--mono); text-align: end; }
 .theme-range, .theme-image-row {
   display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr) 3rem;
+  grid-template-columns: 7.75rem minmax(0, 1fr) 3rem;
   align-items: center;
   gap: .75rem;
   padding: .5rem 0;
@@ -191,6 +320,7 @@ html[data-theme] #confirm-accept.confirm-destructive:hover { background: #882832
   border: 0;
 }
 .theme-range output { font-family: var(--mono); text-align: end; }
+.theme-effect-detail { margin: .35rem 0 .75rem; color: var(--surface-muted); font-size: .75rem; }
 .theme-image-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: .75rem; }
 .theme-image-row small { display: block; color: var(--muted); margin-top: .2rem; }
 .theme-switch {
@@ -202,6 +332,7 @@ html[data-theme] #confirm-accept.confirm-destructive:hover { background: #882832
   cursor: pointer;
 }
 html[data-theme] .theme-switch input {
+  --switch-track: var(--switch-off);
   appearance: none;
   position: relative;
   flex: none;
@@ -209,24 +340,24 @@ html[data-theme] .theme-switch input {
   height: 1.25rem;
   margin: 0;
   padding: 0;
-  border: 0;
+  border: 1px solid var(--switch-track);
   border-radius: 1rem;
-  background: var(--switch-off);
+  background: color-mix(in srgb, var(--switch-track) var(--control-opacity), transparent);
   cursor: pointer;
   transition: background .16s ease;
 }
 .theme-switch input::before {
   content: '';
   position: absolute;
-  top: .1875rem;
-  left: .1875rem;
+  top: .125rem;
+  left: .125rem;
   width: .875rem;
   height: .875rem;
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface-text);
   transition: transform .16s ease;
 }
-html[data-theme] .theme-switch input:checked { background: var(--theme-control-focus, var(--primary)); }
+html[data-theme] .theme-switch input:checked { --switch-track: var(--theme-control-focus, var(--primary)); }
 .theme-switch input:checked::before { transform: translateX(1rem); }
 .theme-switch input:focus-visible {
   outline: .125rem solid var(--theme-control-focus, var(--primary));
@@ -234,7 +365,7 @@ html[data-theme] .theme-switch input:checked { background: var(--theme-control-f
   box-shadow: none;
 }
 html[data-theme] .theme-switch input:disabled, html[data-theme] .theme-switch input:disabled:checked {
-  background: var(--switch-off);
+  --switch-track: var(--switch-off);
   opacity: .45;
   cursor: not-allowed;
 }

@@ -30,7 +30,6 @@
   function valid(message) {
     if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
     switch (message.type) {
-      case 'themeEditor': return true;
       case 'confirm': return typeof message.promptId === 'string' && message.prompt &&
         typeof message.prompt.title === 'string' && typeof message.prompt.message === 'string' &&
         typeof message.prompt.confirmLabel === 'string' && typeof message.prompt.destructive === 'boolean';

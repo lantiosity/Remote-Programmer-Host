@@ -13,23 +13,36 @@ const themeEditor = $('#theme-dialog');
 const confirmationDialog = $('#confirm-dialog');
 const themeInputs = $$('[data-theme-color]');
 const themeSwitches = $$('[data-theme-switch]');
+const themeRanges = {
+  opacity: $('#theme-opacity'),
+  sidebar_opacity: $('#theme-sidebar-opacity'),
+  card_opacity: $('#theme-card-opacity'),
+  control_transparency: $('#theme-control-transparency'),
+  image_opacity: $('#theme-image-opacity')
+};
 let themeDraft = null;
 let appearanceDraft = window.WireLinkTheme.appearance();
 let themeSaving = false;
 let themePicking = false;
 let themePreviewTimer;
 let resizeDrag;
+let glassFrame;
+let lastGlassRegions;
 
 function edgeResize(event) {
   if (!window.chrome?.webview || document.documentElement.hasAttribute('data-window-maximized')) return null;
   const edge = 6; // CSS pixels scale with the WebView's DPI.
   const left = event.clientX < edge;
   const right = event.clientX >= window.innerWidth - edge;
+  const top = event.clientY < edge;
   const bottom = event.clientY >= window.innerHeight - edge;
+  if (top && left) return { direction: 4, cursor: 'nwse-resize' };
+  if (top && right) return { direction: 5, cursor: 'nesw-resize' };
   if (bottom && left) return { direction: 7, cursor: 'nesw-resize' };
   if (bottom && right) return { direction: 8, cursor: 'nwse-resize' };
   if (left || right) return { direction: left ? 1 : 2, cursor: 'ew-resize' };
-  return bottom ? { direction: 6, cursor: 'ns-resize' } : null;
+  if (top || bottom) return { direction: top ? 3 : 6, cursor: 'ns-resize' };
+  return null;
 }
 
 window.addEventListener('pointermove', event => {
@@ -73,10 +86,46 @@ function sendResize(finished) {
     y: Math.round(y - startY), finished });
 }
 
+function refreshGlassRegions() {
+  if (!window.__wirelinkRegionBackdrop || !window.chrome?.webview || glassFrame != null) return;
+  glassFrame = requestAnimationFrame(() => {
+    glassFrame = null;
+    const root = document.documentElement;
+    const regions = [];
+    function addRegion(element, clip) {
+      const box = element.getBoundingClientRect();
+      const x = Math.max(box.left, clip.left), y = Math.max(box.top, clip.top);
+      const right = Math.min(box.right, clip.right), bottom = Math.min(box.bottom, clip.bottom);
+      if (right <= x || bottom <= y) return;
+      const clipped = y !== box.top || bottom !== box.bottom;
+      regions.push({ x, y, width: right - x, height: bottom - y,
+        radius: clipped ? 0 : parseFloat(getComputedStyle(element).borderTopLeftRadius) || 0 });
+    }
+    const viewport = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    if (root.hasAttribute('data-sidebar-frosted')) addRegion($('.sidebar'), viewport);
+    if (root.hasAttribute('data-card-frosted')) {
+      const workspace = $('.workspace').getBoundingClientRect();
+      $$('.workspace .card').forEach(card => addRegion(card, workspace));
+    }
+    const signature = JSON.stringify(regions);
+    if (signature === lastGlassRegions) return;
+    lastGlassRegions = signature;
+    window.chrome.webview.postMessage({ action: 'glass_regions', regions });
+  });
+}
+
+if (window.__wirelinkRegionBackdrop) {
+  const glassObserver = new ResizeObserver(refreshGlassRegions);
+  $$('.sidebar, .workspace, .workspace .card').forEach(element => glassObserver.observe(element));
+  $('.workspace').addEventListener('scroll', refreshGlassRegions, { passive: true });
+  window.addEventListener('resize', refreshGlassRegions);
+}
+
 function applyTheme(theme, notify = true, colors = state.settings.custom_theme ?? null, effects = state.settings.theme_appearance) {
   theme = window.WireLinkTheme.mode(theme);
   const appearance = window.WireLinkTheme.appearance(effects);
   const dark = window.WireLinkTheme.apply(theme, colors, appearance);
+  refreshGlassRegions();
   $('#theme-icon').textContent = dark ? '☾' : '☀';
   try { localStorage.setItem('wirelink-theme', theme); } catch { }
   if (notify && window.chrome?.webview) run('theme', { dark, colors, appearance });
@@ -101,15 +150,19 @@ function showThemeInputs() {
     input.value = colors[key];
     $(`[data-theme-value="${key}"]`).textContent = input.value.toUpperCase();
   });
-  $('#theme-opacity').value = appearanceDraft.opacity;
-  $('#theme-opacity-value').textContent = `${appearanceDraft.opacity}%`;
-  $('#theme-card-opacity').value = appearanceDraft.card_opacity;
-  $('#theme-card-opacity-value').textContent = `${appearanceDraft.card_opacity}%`;
-  $('#theme-image-opacity').value = appearanceDraft.image_opacity;
-  $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
+  for (const [key, input] of Object.entries(themeRanges)) {
+    input.value = appearanceDraft[key];
+    showThemeRange(input);
+  }
   themeSwitches.forEach(input => { input.checked = appearanceDraft[input.dataset.themeSwitch]; });
   $('#theme-image-state').textContent = appearanceDraft.image ? '已选择图片' : '未设置';
   lockThemeControls();
+}
+
+function showThemeRange(input) {
+  $(`#${input.id}-value`).textContent = `${input.value}%`;
+  const control = window.WireLinkTheme.controlTransparency(appearanceDraft);
+  $('#theme-control-result').textContent = `控件背景实际透明度 ${Math.round(control * 100) / 100}%`;
 }
 
 function lockThemeControls() {
@@ -134,6 +187,16 @@ function openThemeEditor() {
   setThemeError('');
   themeEditor.showModal();
 }
+$('#open-theme').addEventListener('click', openThemeEditor);
+$$('[data-window-action]').forEach(button => button.addEventListener('click', () =>
+  window.chrome?.webview?.postMessage({ action: `window_${button.dataset.windowAction}` })));
+
+function showWindowSizeMode(maximized) {
+  document.documentElement.toggleAttribute('data-window-maximized', maximized);
+  const button = $('[data-window-action="maximize"]');
+  button.title = maximized ? '还原窗口' : '最大化';
+  button.setAttribute('aria-label', button.title);
+}
 themeInputs.forEach(input => {
   input.addEventListener('input', () => {
     themeDraft = Object.fromEntries(themeInputs.map(field => [field.dataset.themeColor, field.value]));
@@ -142,24 +205,15 @@ themeInputs.forEach(input => {
   });
   input.addEventListener('change', () => previewTheme());
 });
-$('#theme-opacity').addEventListener('input', event => {
-  appearanceDraft.opacity = Number(event.target.value);
-  $('#theme-opacity-value').textContent = `${appearanceDraft.opacity}%`;
+for (const [key, input] of Object.entries(themeRanges)) input.addEventListener('input', () => {
+  appearanceDraft[key] = Number(input.value);
+  showThemeRange(input);
   previewTheme(false);
-  if (themePreviewTimer == null) themePreviewTimer = setTimeout(() => {
-    themePreviewTimer = null;
-    if (themeEditor.open) previewTheme();
-  }, 40);
-});
-$('#theme-card-opacity').addEventListener('input', event => {
-  appearanceDraft.card_opacity = Number(event.target.value);
-  $('#theme-card-opacity-value').textContent = `${appearanceDraft.card_opacity}%`;
-  previewTheme(false);
-});
-$('#theme-image-opacity').addEventListener('input', event => {
-  appearanceDraft.image_opacity = Number(event.target.value);
-  $('#theme-image-opacity-value').textContent = `${appearanceDraft.image_opacity}%`;
-  previewTheme(false);
+  if ((key === 'opacity' || key === 'sidebar_opacity') && themePreviewTimer == null)
+    themePreviewTimer = setTimeout(() => {
+      themePreviewTimer = null;
+      if (themeEditor.open) previewTheme();
+    }, 40);
 });
 themeSwitches.forEach(input => input.addEventListener('change', () => {
   appearanceDraft[input.dataset.themeSwitch] = input.checked;
@@ -439,10 +493,9 @@ function onMessage(message) {
 }
 function handleMessage(message) {
   switch (message.type) {
-    case 'themeEditor': openThemeEditor(); break;
     case 'confirm': showConfirmation(message); break;
     case 'windowActivation': document.documentElement.toggleAttribute('data-window-inactive', !message.active); break;
-    case 'windowSizeMode': document.documentElement.toggleAttribute('data-window-maximized', message.maximized); break;
+    case 'windowSizeMode': showWindowSizeMode(message.maximized); break;
     case 'themeImage':
       if (themeEditor.open && themePicking) {
         appearanceDraft.image = message.image;
@@ -452,7 +505,7 @@ function handleMessage(message) {
       break;
     case 'init':
       document.documentElement.toggleAttribute('data-window-inactive', message.active === false);
-      document.documentElement.toggleAttribute('data-window-maximized', message.maximized === true);
+      showWindowSizeMode(message.maximized === true);
       populate(message.settings); lockControls();
       $$('[data-app-version]').forEach(element => element.textContent = message.version);
       if (!message.engineReady) { $('#footer-hint').textContent = 'pyOCD 尚未安装：请运行安装上位机依赖.cmd'; toast('缺少 pyOCD 引擎。串口和 BLE OTA 可独立使用。'); }

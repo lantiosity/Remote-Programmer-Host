@@ -31,11 +31,19 @@
   const imageId = value => typeof value === 'string' && /^[0-9a-f]{32}$/.test(value);
   function appearance(value) {
     const clamp = (number, fallback) => Number.isInteger(number) ? Math.max(0, Math.min(100, number)) : fallback;
-    return { opacity: clamp(value?.opacity, 100), image_opacity: clamp(value?.image_opacity, 45),
+    const opacity = clamp(value?.opacity, 100);
+    return { opacity, sidebar_opacity: clamp(value?.sidebar_opacity, opacity), image_opacity: clamp(value?.image_opacity, 45),
       card_opacity: clamp(value?.card_opacity, 88), image: imageId(value?.image) ? value.image : null,
       window_acrylic: (value?.window_acrylic ?? value?.frosted) === true,
       card_frosted: (value?.card_frosted ?? value?.frosted) === true,
+      sidebar_frosted: value?.sidebar_frosted === true,
+      control_transparency: clamp(value?.control_transparency, 0),
       keep_acrylic_when_inactive: value?.keep_acrylic_when_inactive === true };
+  }
+
+  function controlTransparency(effects) {
+    const card = 100 - effects.card_opacity;
+    return card + effects.control_transparency * (100 - card) / 100;
   }
 
   function apply(value, custom, effects) {
@@ -47,11 +55,17 @@
     root.toggleAttribute('data-wallpaper', layers.image !== null);
     root.toggleAttribute('data-window-acrylic', layers.window_acrylic);
     root.toggleAttribute('data-card-frosted', layers.card_frosted);
+    root.toggleAttribute('data-sidebar-frosted', layers.sidebar_frosted);
     root.toggleAttribute('data-keep-acrylic', layers.keep_acrylic_when_inactive);
     root.toggleAttribute('data-window-translucent', layers.opacity < 80 || layers.image !== null && layers.image_opacity > 0);
     root.toggleAttribute('data-card-translucent', layers.card_opacity < 80);
+    root.toggleAttribute('data-sidebar-translucent', layers.sidebar_opacity < 80);
+    const control = controlTransparency(layers);
+    root.toggleAttribute('data-control-translucent', control > 35);
     root.style.setProperty('--window-opacity', `${layers.opacity}%`);
+    root.style.setProperty('--sidebar-opacity', `${layers.sidebar_opacity}%`);
     root.style.setProperty('--card-opacity', `${layers.card_opacity}%`);
+    root.style.setProperty('--control-opacity', `${100 - control}%`);
     if (layers.image) {
       root.style.setProperty('--ui-wallpaper', `url("https://wirelink-theme.example/${layers.image}.png")`);
       root.style.setProperty('--ui-wallpaper-opacity', String(layers.image_opacity / 100));
@@ -83,7 +97,7 @@
     return dark;
   }
 
-  window.WireLinkTheme = { apply, appearance, defaults, fields, isDark, mode, valid };
+  window.WireLinkTheme = { apply, appearance, controlTransparency, defaults, fields, isDark, mode, valid };
   document.documentElement.toggleAttribute('data-desktop-backdrop', window.__wirelinkDesktopBackdrop === true);
   const settings = window.__wirelinkSettings;
   let preference = settings?.theme;
