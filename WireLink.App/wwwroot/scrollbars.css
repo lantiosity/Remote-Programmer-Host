@@ -2,7 +2,7 @@
 [data-scroll-area]{scrollbar-width:none!important;scrollbar-gutter:auto!important}
 [data-scroll-area]::-webkit-scrollbar{display:none;width:0;height:0}
 .scroll-overlay{position:fixed;inset:0;z-index:40;pointer-events:none;--scroll-size:.125rem;--scroll-wide-size:.3125rem;--scroll-hit-size:.875rem;--scroll-inset:.125rem;--scroll-thumb-min:1.75rem}
-.scroll-rail{position:fixed;pointer-events:auto;touch-action:none;user-select:none;outline:none;border:0;padding:0;background:transparent;--scroll-thumb:#9aa9ba;--scroll-active:#648f96}
+.scroll-rail{position:absolute;pointer-events:auto;touch-action:none;user-select:none;outline:none;border:0;padding:0;background:transparent;--scroll-thumb:#9aa9ba;--scroll-active:#648f96}
 .scroll-rail[hidden]{display:none}
 .scroll-thumb{position:absolute;border-radius:.625rem;background:var(--scroll-thumb);opacity:.65;pointer-events:none;transition:width .2s,height .2s,opacity .2s}
 .scroll-rail.vertical{width:var(--scroll-hit-size)}

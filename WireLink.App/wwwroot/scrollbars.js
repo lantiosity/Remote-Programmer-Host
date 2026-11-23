@@ -144,7 +144,9 @@
         axis.start = vertical ? top : left;
         axis.geometry = metrics(vertical ? rect.height : rect.width,
           vertical ? element.scrollHeight : element.scrollWidth, vertical ? element.scrollTop : element.scrollLeft, length, minimum);
-        rail.style.left = left + 'px'; rail.style.top = top + 'px';
+        // A frosted popup establishes its own containing block for the overlay.
+        const layer = rail.parentElement.getBoundingClientRect();
+        rail.style.left = (left - layer.left) + 'px'; rail.style.top = (top - layer.top) + 'px';
         rail.style[vertical ? 'height' : 'width'] = length + 'px';
         rail.style.clipPath = `inset(${Math.max(0, clip.top - top)}px ${Math.max(0, left + width - clip.right)}px ${Math.max(0, top + height - clip.bottom)}px ${Math.max(0, clip.left - left)}px)`;
         thumb.style[vertical ? 'height' : 'width'] = axis.geometry.size + 'px';

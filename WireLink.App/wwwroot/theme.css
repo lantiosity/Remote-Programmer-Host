@@ -225,21 +225,28 @@ html[data-theme] :is(.picker-control, .file-input) > input {
   backdrop-filter: none;
 }
 html[data-theme] .theme-picker select { background: transparent; border-color: transparent; }
+html[data-theme] .picker-control { backdrop-filter: blur(.55rem); }
 html[data-card-frosted] :is(
   input:not([type="range"]), select, .button, .file-input button, .file-input,
-  .picker-control, .firmware-picker, .segmented, .ble-device, .nav-item[aria-current="page"]
+  .firmware-picker, .segmented, .ble-device, .nav-item[aria-current="page"]
 ) {
   backdrop-filter: blur(.55rem);
 }
 html[data-card-frosted] :is(.picker-control, .file-input) > input { backdrop-filter: none; }
-html[data-theme] :is(dialog, .picker-popup) {
+html[data-theme] dialog {
   background: color-mix(in srgb, var(--layer-surface) var(--window-opacity), transparent);
   box-shadow: 0 1rem 3rem var(--layer-shadow);
+}
+html[data-theme] .picker-popup {
+  background: color-mix(in srgb, var(--layer-surface) calc(86% + var(--window-opacity) * .08), transparent);
+  backdrop-filter: blur(1.15rem) saturate(1.1);
+  box-shadow: 0 1rem 3rem var(--layer-shadow);
+  text-shadow: none;
 }
 html[data-theme] dialog::backdrop {
   background: color-mix(in srgb, var(--layer-scrim) calc(82% - var(--window-opacity) * .48), transparent);
 }
-html[data-window-acrylic]:is(:not([data-window-inactive]), [data-keep-acrylic]) :is(dialog, .picker-popup) {
+html[data-window-acrylic]:is(:not([data-window-inactive]), [data-keep-acrylic]) dialog {
   backdrop-filter: blur(.85rem);
 }
 
@@ -254,7 +261,7 @@ html[data-theme] :is(.hint, .muted, .optional, .brand small, .section-label, .si
 html[data-theme] #elapsed,
 html[data-theme] input::placeholder,
 html[data-theme] .wiring summary::before { color: var(--surface-muted); }
-html[data-window-translucent] :is(main, dialog, .picker-popup),
+html[data-window-translucent] :is(main, dialog),
 html[data-sidebar-translucent] .sidebar,
 html[data-card-translucent] .workspace .card {
   text-shadow: 0 0 .12rem var(--text-halo), 0 .045rem .075rem var(--text-halo);
