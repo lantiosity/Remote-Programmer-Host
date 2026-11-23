@@ -49,6 +49,12 @@ $readme = (Get-Content -LiteralPath "$workspace/assets/PORTABLE-README.txt" -Raw
 foreach ($settings in @("$destination/data/settings.json", "$destination/.wirelink-desktop.json")) {
     if (Test-Path -LiteralPath $settings) { Copy-Item -LiteralPath $settings -Destination "$staging/data/settings.json"; break }
 }
+foreach ($library in @('dfp', 'offline')) {
+    $source = "$destination/data/$library"
+    if (Test-Path -LiteralPath $source -PathType Container) {
+        Copy-Item -LiteralPath $source -Destination "$staging/data" -Recurse
+    }
+}
 & tools/Build-Launcher.cmd $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native launcher build failed.' }
 # Keep compiler intermediates out of the deliverable.
