@@ -9,12 +9,12 @@ public class ChromeForm : Form
     private const int ResizeBorder = 6;
     private CaptionBar? caption;
 
-    private protected void InstallChrome(WindowPalette palette)
+    private protected void InstallChrome(WindowPalette palette, Action editTheme)
     {
         FormBorderStyle = FormBorderStyle.None;
         BackColor = palette.Header;
         Padding = new Padding(ResizeBorder);
-        caption = new CaptionBar(this, palette) { Dock = DockStyle.Top, Height = 32 };
+        caption = new CaptionBar(this, palette, editTheme) { Dock = DockStyle.Top, Height = 32 };
         Controls.Add(caption);
         caption.SendToBack(); // Dock the top strip before the fill content.
     }
@@ -100,25 +100,30 @@ public class ChromeForm : Form
 internal sealed class CaptionBar : Control
 {
     private readonly Form owner;
-    private readonly CaptionButton minimize, maximize, close;
+    private readonly CaptionButton[] buttons = [];
+    private readonly CaptionButton theme, maximize;
+    private readonly ToolTip tips = new();
     private WindowPalette palette;
 
-    public CaptionBar(Form owner, WindowPalette palette)
+    public CaptionBar(Form owner, WindowPalette palette, Action editTheme)
     {
         this.owner = owner; this.palette = palette;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         AccessibleName = "窗口控制栏";
-        minimize = new("最小化", CaptionGlyph.Minimize, palette, () => owner.WindowState = FormWindowState.Minimized);
+        theme = new("自定义主题", CaptionGlyph.Theme, palette, editTheme) { TabStop = true };
+        var minimize = new CaptionButton("最小化", CaptionGlyph.Minimize, palette, () => owner.WindowState = FormWindowState.Minimized);
         maximize = new("最大化", CaptionGlyph.Maximize, palette, () => owner.WindowState = owner.WindowState == FormWindowState.Maximized
             ? FormWindowState.Normal : FormWindowState.Maximized);
-        close = new("关闭", CaptionGlyph.Close, palette, owner.Close);
-        Controls.AddRange([minimize, maximize, close]);
+        var close = new CaptionButton("关闭", CaptionGlyph.Close, palette, owner.Close);
+        buttons = [theme, minimize, maximize, close];
+        tips.SetToolTip(theme, theme.AccessibleName);
+        Controls.AddRange(buttons);
     }
 
     public void ApplyPalette(WindowPalette value)
     {
         palette = value;
-        foreach (CaptionButton button in Controls) button.ApplyPalette(value);
+        foreach (var button in buttons) button.ApplyPalette(value);
         Invalidate();
     }
 
@@ -129,15 +134,31 @@ internal sealed class CaptionBar : Control
         maximize.Invalidate();
     }
 
-    public bool IsDragPoint(Point parentPoint) => Bounds.Contains(parentPoint) && parentPoint.X < Left + minimize.Left;
+    public bool IsDragPoint(Point parentPoint) => Bounds.Contains(parentPoint) && parentPoint.X < Left + theme.Left;
 
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        var width = (int)Math.Round(46 * DeviceDpi / 96f);
-        minimize.SetBounds(Width - width * 3, 0, width, Height);
-        maximize.SetBounds(Width - width * 2, 0, width, Height);
-        close.SetBounds(Width - width, 0, width, Height);
+        PositionButtons();
+    }
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        PositionButtons();
+    }
+
+    private void PositionButtons()
+    {
+        var width = LogicalToDeviceUnits(46);
+        for (var i = 0; i < buttons.Length; i++)
+            buttons[i].SetBounds(Width - width * (buttons.Length - i), 0, width, Height);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) tips.Dispose();
+        base.Dispose(disposing);
     }
 
     protected override void OnPaint(PaintEventArgs e) => e.Graphics.Clear(palette.Header);
@@ -150,7 +171,7 @@ internal sealed class CaptionBar : Control
     }
 }
 
-internal enum CaptionGlyph { Minimize, Maximize, Restore, Close }
+internal enum CaptionGlyph { Theme, Minimize, Maximize, Restore, Close }
 
 internal sealed class CaptionButton : Button
 {
@@ -170,6 +191,8 @@ internal sealed class CaptionButton : Button
     public void ApplyPalette(WindowPalette value) { palette = value; Invalidate(); }
     protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
     protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; Invalidate(); }
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+    protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -181,6 +204,7 @@ internal sealed class CaptionButton : Button
         using var pen = new Pen(hover && Glyph == CaptionGlyph.Close ? Color.White : palette.Text, Math.Max(1, scale));
         switch (Glyph)
         {
+            case CaptionGlyph.Theme: DrawPalette(e.Graphics, pen, scale); break;
             case CaptionGlyph.Minimize: e.Graphics.DrawLine(pen, x, y + size / 2, x + size, y + size / 2); break;
             case CaptionGlyph.Maximize: e.Graphics.DrawRectangle(pen, x, y, size, size); break;
             case CaptionGlyph.Restore:
@@ -192,5 +216,28 @@ internal sealed class CaptionButton : Button
                 e.Graphics.DrawLine(pen, x + size, y, x, y + size);
                 break;
         }
+        if (Focused && ShowFocusCues)
+        {
+            var inset = LogicalToDeviceUnits(3);
+            using var focus = new Pen(palette.Text, Math.Max(1, scale));
+            e.Graphics.DrawRectangle(focus, inset, inset, Width - 2 * inset - 1, Height - 2 * inset - 1);
+        }
+    }
+
+    private void DrawPalette(Graphics graphics, Pen pen, float scale)
+    {
+        var originX = (Width - 14 * scale) / 2;
+        var originY = (Height - 14 * scale) / 2;
+        PointF At(float x, float y) => new(originX + x * scale, originY + y * scale);
+        using var shape = new GraphicsPath();
+        shape.AddBezier(At(7, 1), At(11, 1), At(13, 4), At(13, 7));
+        shape.AddBezier(At(13, 7), At(13, 10), At(9, 8), At(9, 10));
+        shape.AddBezier(At(9, 10), At(9, 11), At(11, 13), At(7, 13));
+        shape.AddBezier(At(7, 13), At(-1, 13), At(-1, 1), At(7, 1));
+        shape.CloseFigure();
+        graphics.DrawPath(pen, shape);
+        using var dot = new SolidBrush(pen.Color);
+        foreach (var center in new[] { At(4, 5), At(7, 3.8f), At(10, 5.2f) })
+            graphics.FillEllipse(dot, center.X - .7f * scale, center.Y - .7f * scale, 1.4f * scale, 1.4f * scale);
     }
 }

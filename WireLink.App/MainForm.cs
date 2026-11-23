@@ -77,7 +77,7 @@ public sealed class MainForm : ChromeForm
         content.Controls.Add(web);
         content.Controls.Add(startupSurface);
         Controls.Add(content);
-        InstallChrome(palette);
+        InstallChrome(palette, OpenThemeEditor);
         startupSurface.BringToFront();
         pyocd = new(root, Log);
         startup.Mark("form_created");
@@ -235,6 +235,13 @@ public sealed class MainForm : ChromeForm
         if (ready && !web.IsDisposed && web.CoreWebView2 != null)
             web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value, WebJson));
     });
+
+    private void OpenThemeEditor()
+    {
+        if (!presented || closing || confirming) return;
+        web.Focus();
+        Post(new { type = "themeEditor" });
+    }
 
     private void Log(string text)
     {

@@ -73,7 +73,7 @@ html[data-custom-theme] .notice > span { border-color: var(--ui-accent-ink); }
 .theme-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
 #theme-reset { margin-inline-end: auto; }
 #theme-error { margin: .75rem 0 0; color: var(--ink); }
-#theme-dialog button:focus-visible, #theme-edit:focus-visible {
+#theme-dialog button:focus-visible {
   outline: 2px solid var(--theme-control-focus, var(--primary));
   outline-offset: 2px;
 }

@@ -44,12 +44,14 @@ function setThemeError(text) {
   status.hidden = !text;
 }
 
-$('#theme-edit').addEventListener('click', () => {
+function openThemeEditor() {
+  if (state.hostLost || themeEditor.open || $('#ble-picker').open) return;
+  pickers.close();
   themeDraft = window.WireLinkTheme.valid(state.settings.custom_theme);
   showThemeInputs();
   setThemeError('');
   themeEditor.showModal();
-});
+}
 themeInputs.forEach(input => {
   input.addEventListener('input', () => {
     themeDraft = Object.fromEntries(themeInputs.map(field => [field.dataset.themeColor, field.value]));
@@ -291,6 +293,7 @@ function onMessage(message) {
 }
 function handleMessage(message) {
   switch (message.type) {
+    case 'themeEditor': openThemeEditor(); break;
     case 'init': populate(message.settings); lockControls();
       $$('[data-app-version]').forEach(element => element.textContent = message.version);
       if (!message.engineReady) { $('#footer-hint').textContent = 'pyOCD 尚未安装：请运行安装上位机依赖.cmd'; toast('缺少 pyOCD 引擎。串口和 BLE OTA 可独立使用。'); }

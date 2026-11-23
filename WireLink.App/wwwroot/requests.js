@@ -30,6 +30,7 @@
   function valid(message) {
     if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
     switch (message.type) {
+      case 'themeEditor': return true;
       case 'response': return typeof message.id === 'string' && typeof message.ok === 'boolean';
       case 'rx': case 'tx': return typeof message.hex === 'string' && message.hex.length <= 1000000 && /^(?:[0-9a-fA-F]{2})*$/.test(message.hex);
       case 'progress': return Number.isFinite(message.value);
