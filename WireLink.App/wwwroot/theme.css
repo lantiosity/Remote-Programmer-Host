@@ -1,0 +1,80 @@
+html[data-custom-theme] {
+  --bg: var(--ui-workspace);
+  --primary: var(--ui-accent);
+  --primary-dark: var(--ui-accent-hover);
+}
+
+html[data-custom-theme] header { background: var(--ui-header); }
+html[data-custom-theme] .sidebar { background: var(--ui-sidebar); }
+html[data-custom-theme] .card,
+html[data-custom-theme] dialog,
+html[data-custom-theme] .picker-popup { background: var(--ui-surface); }
+
+html[data-custom-theme] .workspace-nav {
+  --nav-selected: var(--ui-selection);
+  --nav-selected-text: var(--ui-accent-ink);
+  --nav-focus: var(--ui-accent-ink);
+}
+
+html[data-custom-theme] .button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--ui-button-ink);
+  box-shadow: none;
+}
+
+html[data-custom-theme] .button.primary:hover { background: var(--primary-dark); }
+html[data-custom-theme] .heading-dot { color: var(--ui-accent-ink); }
+html[data-custom-theme] #progress { background: var(--ui-accent); }
+html[data-custom-theme] input:focus,
+html[data-custom-theme] select:focus,
+html[data-custom-theme] .file-input:focus-within {
+  border-color: var(--ui-accent-ink);
+  box-shadow: 0 0 0 2px var(--ui-selection);
+}
+html[data-custom-theme] input[type="checkbox"] { accent-color: var(--ui-accent-ink); }
+html[data-custom-theme] .notice {
+  background: var(--ui-selection);
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-custom-theme] .notice b { color: var(--ui-accent-ink); }
+html[data-custom-theme] .notice code { background: var(--ui-surface); color: inherit; }
+html[data-custom-theme] .notice > span { border-color: var(--ui-accent-ink); }
+
+#theme-dialog {
+  min-width: 0;
+  width: min(28rem, calc(100% - 2rem));
+  padding: 1.375rem;
+}
+
+#theme-description {
+  margin: 0 0 1rem;
+  line-height: 1.6;
+}
+
+.theme-colors label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3rem 4.25rem;
+  gap: .75rem;
+  align-items: center;
+  padding: .5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.theme-colors input[type="color"] {
+  height: 1.75rem;
+  margin: 0;
+  padding: .125rem;
+  cursor: pointer;
+}
+
+.theme-colors output { font-family: var(--mono); text-align: end; }
+.theme-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
+#theme-reset { margin-inline-end: auto; }
+#theme-error { margin: .75rem 0 0; color: var(--ink); }
+#theme-dialog button:focus-visible, #theme-edit:focus-visible {
+  outline: 2px solid var(--theme-control-focus, var(--primary));
+  outline-offset: 2px;
+}
+html[data-custom-theme] { --theme-control-focus: var(--ui-accent-ink); }

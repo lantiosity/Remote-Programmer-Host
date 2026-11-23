@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="pickers.css">
   <link rel="stylesheet" href="wifi.css">
   <link rel="stylesheet" href="scrollbars.css">
+  <link rel="stylesheet" href="theme.css">
   <script src="scrollbars.js" defer></script>
   <script src="pickers.js" defer></script>
   <script src="requests.js" defer></script>
@@ -70,7 +71,7 @@
   </aside>
 
   <main>
-    <header><div class="breadcrumb">工作空间 <span>/</span> <b id="breadcrumb">目标芯片烧录</b></div><div class="header-tools"><label class="theme-picker"><span id="theme-icon" aria-hidden="true">◐</span><select data-setting="theme" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label><div class="status-pill" id="status"><i></i><span>就绪</span></div></div></header>
+    <header><div class="breadcrumb">工作空间 <span>/</span> <b id="breadcrumb">目标芯片烧录</b></div><div class="header-tools"><label class="theme-picker"><span id="theme-icon" aria-hidden="true">◐</span><select data-setting="theme" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label><button type="button" id="theme-edit" class="text-button" aria-haspopup="dialog">自定义主题</button><div class="status-pill" id="status"><i></i><span>就绪</span></div></div></header>
     <div class="workspace" data-scroll-area="工作区">
       <section class="page" id="page-flash">
         <div class="page-heading"><div><div class="eyebrow">PROGRAM YOUR TARGET</div><h1>目标芯片烧录<span class="heading-dot">.</span></h1><p>从固件到设备，通过你选择的链路。</p></div><span class="chip-badge">SWD <span>CONNECTED WORKFLOW</span></span></div>
@@ -171,5 +172,20 @@
   <section id="frequency-menu" class="picker-popup frequency-popup hidden" aria-label="SWD 频率预设"><div class="picker-menu-heading">SWD 频率预设</div><div id="frequency-options" class="picker-options" data-scroll-area="SWD 频率" role="listbox" aria-label="SWD 频率"></div><div class="picker-footnote">也可手动输入 10～50000 kHz。</div></section>
   <div id="toast" role="alert" class="hidden"></div>
   <dialog id="ble-picker" data-scroll-area="蓝牙设备窗口"><div class="dialog-heading"><h2>选择蓝牙烧录器</h2><button class="text-button" id="close-picker">✕</button></div><div id="ble-devices" data-scroll-area="蓝牙设备列表"></div><p class="hint">同名设备请根据地址选择。</p></dialog>
+  <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description">
+    <div class="dialog-heading"><h2 id="theme-title">自定义主题</h2></div>
+    <p id="theme-description">更改会实时预览。背景和卡片色调随浅色或深色模式调整。</p>
+    <div class="theme-colors">
+      <label>强调色<input type="color" data-theme-color="accent" value="#087f80"><output data-theme-value="accent"></output></label>
+      <label>工作区色调<input type="color" data-theme-color="background" value="#f5f7fb"><output data-theme-value="background"></output></label>
+      <label>卡片色调<input type="color" data-theme-color="surface" value="#ffffff"><output data-theme-value="surface"></output></label>
+    </div>
+    <p id="theme-error" role="alert" hidden></p>
+    <div class="theme-actions">
+      <button type="button" id="theme-reset" class="text-button">恢复默认配色</button>
+      <button type="button" id="theme-cancel" class="button">取消</button>
+      <button type="button" id="theme-save" class="button primary">保存主题</button>
+    </div>
+  </dialog>
 </body>
 </html>

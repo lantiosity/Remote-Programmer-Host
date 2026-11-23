@@ -9,21 +9,79 @@ let decoder = new TextDecoder('utf-8');
 let terminalText = '';
 let offlineItems = [], offlinePending = false;
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+const themeEditor = $('#theme-dialog');
+const themeInputs = $$('[data-theme-color]');
+let themeDraft = null;
+let themeSaving = false;
 
-function applyTheme(theme, notify = true) {
-  theme = ['system', 'light', 'dark'].includes(theme) ? theme : 'system';
-  const dark = theme === 'dark' || theme === 'system' && systemTheme.matches;
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+function applyTheme(theme, notify = true, colors = state.settings.custom_theme ?? null) {
+  theme = window.WireLinkTheme.mode(theme);
+  const dark = window.WireLinkTheme.apply(theme, colors);
   $('#theme-icon').textContent = dark ? '☾' : '☀';
   try { localStorage.setItem('wirelink-theme', theme); } catch { }
-  if (notify && window.chrome?.webview) run('theme', { dark });
+  if (notify && window.chrome?.webview) run('theme', { dark, colors });
 }
 systemTheme.addEventListener('change', () => {
-  if (state.settings.theme === 'system') applyTheme('system');
+  if (state.settings.theme !== 'system') return;
+  applyTheme('system', true, themeEditor.open ? themeDraft : state.settings.custom_theme ?? null);
+  if (themeEditor.open) showThemeInputs();
 });
-try { applyTheme(window.__wirelinkSettings?.theme || localStorage.getItem('wirelink-theme') || 'system', false); }
+try { applyTheme(window.__wirelinkSettings?.theme || localStorage.getItem('wirelink-theme') || 'system', false, window.__wirelinkSettings?.custom_theme ?? null); }
 catch { applyTheme('system', false); }
+
+function showThemeInputs() {
+  const colors = themeDraft ?? window.WireLinkTheme.defaults(window.WireLinkTheme.isDark(state.settings.theme));
+  themeInputs.forEach(input => {
+    const key = input.dataset.themeColor;
+    input.value = colors[key];
+    $(`[data-theme-value="${key}"]`).textContent = input.value.toUpperCase();
+  });
+}
+
+function setThemeError(text) {
+  const status = $('#theme-error');
+  status.textContent = text;
+  status.hidden = !text;
+}
+
+$('#theme-edit').addEventListener('click', () => {
+  themeDraft = window.WireLinkTheme.valid(state.settings.custom_theme);
+  showThemeInputs();
+  setThemeError('');
+  themeEditor.showModal();
+});
+themeInputs.forEach(input => {
+  input.addEventListener('input', () => {
+    themeDraft = Object.fromEntries(themeInputs.map(field => [field.dataset.themeColor, field.value]));
+    $(`[data-theme-value="${input.dataset.themeColor}"]`).textContent = input.value.toUpperCase();
+    applyTheme(state.settings.theme, false, themeDraft);
+  });
+  input.addEventListener('change', () => applyTheme(state.settings.theme, true, themeDraft));
+});
+$('#theme-reset').addEventListener('click', () => {
+  themeDraft = null;
+  showThemeInputs();
+  applyTheme(state.settings.theme, true, null);
+});
+$('#theme-cancel').addEventListener('click', () => themeEditor.close());
+themeEditor.addEventListener('cancel', event => { if (themeSaving) event.preventDefault(); });
+themeEditor.addEventListener('close', () => applyTheme(state.settings.theme));
+$('#theme-save').addEventListener('click', async () => {
+  if (themeSaving) return;
+  themeSaving = true;
+  const fields = [...themeInputs, $('#theme-save'), $('#theme-cancel'), $('#theme-reset')];
+  fields.forEach(field => { field.disabled = true; });
+  setThemeError('');
+  try {
+    await request('theme_save', { colors: themeDraft, dark: window.WireLinkTheme.isDark(state.settings.theme) });
+    state.settings.custom_theme = themeDraft;
+    themeEditor.close();
+  } catch (error) { setThemeError(error.message); }
+  finally {
+    themeSaving = false;
+    fields.forEach(field => { field.disabled = !!state.hostLost; });
+  }
+});
 
 function snapshot() {
   $$('[data-setting]').forEach(input => {
