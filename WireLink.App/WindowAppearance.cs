@@ -55,11 +55,25 @@ internal sealed record WindowPalette(Color Background, Color Header, Color Sideb
 
 internal static class WindowAppearance
 {
+    internal enum DesktopMaterial { Solid, Clear, Acrylic }
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr handle, int attribute, ref int value, int size);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmExtendFrameIntoClientArea(IntPtr handle, ref FrameMargins margins);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmEnableBlurBehindWindow(IntPtr handle, ref BlurBehind blur);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BlurBehind(bool enabled)
+    {
+        public uint Flags = 1; // DWM_BB_ENABLE
+        public int Enabled = enabled ? 1 : 0;
+        public IntPtr Region = IntPtr.Zero;
+        public int TransitionOnMaximized = 0;
+    }
 
     [DllImport("uxtheme.dll")]
     private static extern IntPtr BeginBufferedPaint(IntPtr dc, ref PaintRect rect, int format,
@@ -90,11 +104,17 @@ internal static class WindowAppearance
         return DwmExtendFrameIntoClientArea(handle, ref margins) >= 0;
     }
 
-    public static void SetDesktopAcrylic(IntPtr handle, bool enabled)
+    public static void SetDesktopMaterial(IntPtr handle, DesktopMaterial material)
     {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621)) return;
-        var backdrop = enabled ? 3 : 1; // DWMSBT_TRANSIENTWINDOW (Desktop Acrylic) / DWMSBT_NONE.
-        DwmSetWindowAttribute(handle, 38, ref backdrop, sizeof(int));
+        var acrylic = material == DesktopMaterial.Acrylic && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
+        // On Windows 8+ this enables per-pixel composition without applying a blur.
+        var blur = new BlurBehind(material != DesktopMaterial.Solid);
+        DwmEnableBlurBehindWindow(handle, ref blur);
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
+        {
+            var backdrop = acrylic ? 3 : 1; // DWMSBT_TRANSIENTWINDOW (Desktop Acrylic) / DWMSBT_NONE.
+            DwmSetWindowAttribute(handle, 38, ref backdrop, sizeof(int));
+        }
     }
 
     public static bool PaintWithAlpha(Graphics target, Rectangle bounds, Action<Graphics> paint)

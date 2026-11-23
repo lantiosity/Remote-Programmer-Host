@@ -22,7 +22,9 @@ public sealed class MainForm : ChromeForm
     private WindowPalette appearance = WindowPalette.For(false);
     private bool presented;
     private bool desktopBackdrop;
-    private bool? acrylic;
+    private WindowAppearance.DesktopMaterial? desktopMaterial;
+    private bool windowActive;
+    private bool windowMaximized;
     private ThemeAppearance displayedEffects = new();
     private readonly string root = FindRoot();
     private readonly string configPath;
@@ -43,6 +45,7 @@ public sealed class MainForm : ChromeForm
     private CancellationTokenSource? serialCancellation;
     private bool closing, allowClose, ready;
     private bool confirming;
+    private (string Id, TaskCompletionSource<bool> Completion)? pendingConfirmation;
     private bool runtimeSetupAttempted;
     private Task<JsonNode>? initialCatalog;
     private readonly CancellationTokenSource lifetime = new();
@@ -102,7 +105,7 @@ public sealed class MainForm : ChromeForm
         base.OnHandleCreated(e);
         WindowAppearance.ApplyFrame(Handle, dark, appearance);
         desktopBackdrop = WindowAppearance.EnableDesktopBackdrop(Handle);
-        acrylic = null;
+        desktopMaterial = null;
         SetWindowBackdrop(displayedEffects);
     }
 
@@ -111,6 +114,34 @@ public sealed class MainForm : ChromeForm
         base.OnLoad(e);
         // Begin before Shown, while the independently painted native surface is visible.
         _ = InitializeAsync();
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        UpdateWindowActivation(true);
+    }
+
+    protected override void OnDeactivate(EventArgs e)
+    {
+        base.OnDeactivate(e);
+        UpdateWindowActivation(false);
+    }
+
+    private void UpdateWindowActivation(bool active)
+    {
+        windowActive = active;
+        SetWindowBackdrop(displayedEffects);
+        Post(new { type = "windowActivation", active });
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        var maximized = WindowState == FormWindowState.Maximized;
+        if (windowMaximized == maximized) return;
+        windowMaximized = maximized;
+        Post(new { type = "windowSizeMode", maximized });
     }
 
     private void ApplyAppearance(bool isDark, ThemeColors? custom, ThemeAppearance effects)
@@ -139,10 +170,12 @@ public sealed class MainForm : ChromeForm
             BackColor = translucent ? Color.Black : appearance.Header;
             SetCaptionOpacity(effects.Opacity);
         }
-        var enabled = effects.Frosted && translucent;
-        if (acrylic == enabled) return;
-        acrylic = enabled;
-        WindowAppearance.SetDesktopAcrylic(Handle, enabled);
+        var material = !translucent ? WindowAppearance.DesktopMaterial.Solid
+            : effects.WindowAcrylic == true && (windowActive || effects.KeepAcrylicWhenInactive)
+                ? WindowAppearance.DesktopMaterial.Acrylic : WindowAppearance.DesktopMaterial.Clear;
+        if (desktopMaterial == material) return;
+        WindowAppearance.SetDesktopMaterial(Handle, material);
+        desktopMaterial = material;
     }
 
     private void PresentWorkbench(string source)
@@ -226,6 +259,7 @@ public sealed class MainForm : ChromeForm
             core.DownloadStarting += (_, args) => args.Cancel = true;
             core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
             core.WebMessageReceived += MessageReceivedAsync;
+            core.ProcessFailed += (_, _) => pendingConfirmation?.Completion.TrySetResult(false);
             // Theme is available before the document's styles or deferred app script run.
             await core.AddScriptToExecuteOnDocumentCreatedAsync($"window.__wirelinkDesktopBackdrop = {(desktopBackdrop ? "true" : "false")}; window.__wirelinkSettings = "
                 + JsonSerializer.Serialize(settings, Settings.Json) + ";");
@@ -332,11 +366,19 @@ public sealed class MainForm : ChromeForm
                     startup.Mark("document_ready");
                     ready = true;
                     Post(new { type = "init", settings = JsonSerializer.SerializeToNode(settings, Settings.Json),
-                        version = AppVersion, engineReady = File.Exists(pyocd.Python), root });
+                        version = AppVersion, engineReady = File.Exists(pyocd.Python), root, active = windowActive,
+                        maximized = windowMaximized });
                     Log($"WireLink {AppVersion} 已就绪 · C# / .NET 8 / WebView2");
                     break;
                 case "painted":
                     PresentWorkbench(data.TryGetProperty("source", out var source) ? source.GetString() ?? "unknown" : "unknown");
+                    break;
+                case "window_resize":
+                    BeginEdgeResize(data.GetProperty("direction").GetInt32());
+                    break;
+                case "confirm_result":
+                    if (pendingConfirmation is { } confirmation && data.GetProperty("promptId").GetString() == confirmation.Id)
+                        confirmation.Completion.TrySetResult(data.GetProperty("accepted").GetBoolean());
                     break;
                 case "targetsBackground":
                     initialCatalog ??= new PyOcdService(root, _ => { }).CatalogAsync("targets", dfps.Resolve(value with { Pack = settings.Pack }), lifetime.Token);
@@ -492,16 +534,25 @@ public sealed class MainForm : ChromeForm
 
     private async Task<bool> ConfirmAsync(ConfirmationPrompt prompt)
     {
+        if (confirming) return false;
         confirming = true;
         try
         {
             // Let the WebView event return before ShowDialog enters its modal message loop.
             await Task.Yield();
             if (IsDisposed) return false;
+            if (presented && web.CoreWebView2 is { } core)
+            {
+                var promptId = Guid.NewGuid().ToString("N");
+                var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                pendingConfirmation = (promptId, completion);
+                core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "confirm", promptId, prompt }, WebJson));
+                return await completion.Task;
+            }
             using var dialog = new ConfirmationDialog(prompt, dark, appearance);
             return dialog.ShowDialog(this) == DialogResult.OK;
         }
-        finally { confirming = false; }
+        finally { pendingConfirmation = null; confirming = false; }
     }
 
     private async Task RunJobAsync(string action, Settings value, CancellationToken ct, WifiSetupRequest? wifi = null)

@@ -9,11 +9,16 @@ public class ChromeForm : Form
     private const int ResizeBorder = 6;
     private CaptionBar? caption;
 
+    [DllImport("user32.dll")]
+    private static extern int ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessageW(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
+
     private protected void InstallChrome(WindowPalette palette, Action editTheme)
     {
         FormBorderStyle = FormBorderStyle.None;
         BackColor = palette.Header;
-        Padding = new Padding(ResizeBorder);
         caption = new CaptionBar(this, palette, editTheme) { Dock = DockStyle.Top, Height = 32 };
         Controls.Add(caption);
         caption.SendToBack(); // Dock the top strip before the fill content.
@@ -41,8 +46,30 @@ public class ChromeForm : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        Padding = WindowState == FormWindowState.Maximized ? Padding.Empty : new Padding((int)Math.Round(ResizeBorder * DeviceDpi / 96f));
         caption?.RefreshWindowState();
+    }
+
+    private protected void BeginEdgeResize(int direction)
+    {
+        if (WindowState != FormWindowState.Normal || direction is < 1 or > 8
+            || (MouseButtons & MouseButtons.Left) == 0) return;
+        var point = Cursor.Position;
+        ReleaseCapture();
+        // The host starts the native resize loop after returning from WebView2's message callback.
+        PostMessageW(Handle, 0x00A1, (IntPtr)(direction + 9),
+            (IntPtr)((ushort)point.X | ((int)(ushort)point.Y << 16))); // WM_NCLBUTTONDOWN / HTLEFT through HTBOTTOMRIGHT
+    }
+
+    private int ResizeHit(Point point)
+    {
+        if (WindowState != FormWindowState.Normal) return 0;
+        var edge = LogicalToDeviceUnits(ResizeBorder);
+        var left = point.X < edge;
+        var right = point.X >= ClientSize.Width - edge;
+        var top = point.Y < edge;
+        var bottom = point.Y >= ClientSize.Height - edge;
+        return top && left ? 13 : top && right ? 14 : bottom && left ? 16 : bottom && right ? 17
+            : left ? 10 : right ? 11 : top ? 12 : bottom ? 15 : 0;
     }
 
     protected override void WndProc(ref Message message)
@@ -79,15 +106,8 @@ public class ChromeForm : Form
         {
             var packed = message.LParam.ToInt64();
             var point = PointToClient(new Point(unchecked((short)(packed & 0xFFFF)), unchecked((short)((packed >> 16) & 0xFFFF))));
-            var edge = Padding.Left;
-            if (WindowState != FormWindowState.Maximized)
-            {
-                var left = point.X < edge; var right = point.X >= ClientSize.Width - edge;
-                var top = point.Y < edge; var bottom = point.Y >= ClientSize.Height - edge;
-                var hit = top && left ? 13 : top && right ? 14 : bottom && left ? 16 : bottom && right ? 17
-                    : left ? 10 : right ? 11 : top ? 12 : bottom ? 15 : 0;
-                if (hit != 0) { message.Result = (IntPtr)hit; return; }
-            }
+            var hit = ResizeHit(point);
+            if (hit != 0) { message.Result = (IntPtr)hit; return; }
             if (caption?.IsDragPoint(point) == true) message.Result = (IntPtr)2; // HTCAPTION: drag, snap, double-click.
         }
     }
