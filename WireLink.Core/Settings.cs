@@ -5,6 +5,15 @@ using System.Text.RegularExpressions;
 
 namespace WireLink.Core;
 
+public sealed record ThemeColors(string Accent, string Background, string Surface)
+{
+    public static ThemeColors? Validated(ThemeColors? value) => value != null &&
+        IsColor(value.Accent) && IsColor(value.Background) && IsColor(value.Surface) ? value : null;
+
+    private static bool IsColor(string? value) => value is { Length: 7 } && value[0] == '#'
+        && value.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") < 0;
+}
+
 public sealed record Settings
 {
     public string Transport { get; init; } = "USB";
@@ -33,6 +42,7 @@ public sealed record Settings
     public string OtaPort { get; init; } = "5557";
     public bool VerifyOnly { get; init; }
     public string Theme { get; init; } = "system";
+    public ThemeColors? CustomTheme { get; init; }
 
     public static readonly JsonSerializerOptions Json = new()
     {

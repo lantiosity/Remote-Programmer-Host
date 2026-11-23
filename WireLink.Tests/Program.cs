@@ -108,8 +108,13 @@ Test("UTF-8 / HEX 收发编码及换行", () =>
 Test("深色主题保存并恢复，兼容旧配置和损坏文件", () =>
 {
     var path = Path.Combine(temp, "settings.json");
-    (settings with { Theme = "dark" }).Save(path);
-    Check(Settings.Load(path).Theme == "dark");
+    var colors = new ThemeColors("#CD80F1", "#141827", "#304662");
+    (settings with { Theme = "dark", CustomTheme = colors }).Save(path);
+    var loaded = Settings.Load(path);
+    Check(loaded.Theme == "dark" && ThemeColors.Validated(loaded.CustomTheme) == colors);
+    Check(ThemeColors.Validated(colors with { Accent = "#12ZZ99" }) == null);
+    (loaded with { CustomTheme = null }).Save(path);
+    Check(Settings.Load(path).CustomTheme == null);
     File.WriteAllText(path, "{\"usb_id\":\"OLD\"}");
     Check(Settings.Load(path).Theme == "system" && Settings.Load(path).UsbId == "OLD");
     File.WriteAllText(path, "bad JSON"); Check(Settings.Load(path) == new Settings());
