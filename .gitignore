@@ -1,0 +1,22 @@
+# Local environments, output and user settings
+.git/
+**/bin/
+**/obj/
+**/__pycache__/
+**/*.pyc
+.vs/
+.venv*/
+build/
+publish/
+portable/
+.publish-backup/
+.wirelink*.json
+data/
+*.user
+*.log
+# Large generated portable downloads remain alongside tracked source/checksums.
+/release/*/*-win-x64.7z
+/release/*/*-win-x64.manifest.json
+
+# Local cross-repository review notes
+/docs/COMPATIBILITY_FIRMWARE_0.1.1.md

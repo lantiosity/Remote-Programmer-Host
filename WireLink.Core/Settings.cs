@@ -1,0 +1,158 @@
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+
+namespace WireLink.Core;
+
+public sealed record ThemeColors(string Accent, string Background, string Surface)
+{
+    public static ThemeColors? Validated(ThemeColors? value) => value != null &&
+        IsColor(value.Accent) && IsColor(value.Background) && IsColor(value.Surface) ? value : null;
+
+    private static bool IsColor(string? value) => value is { Length: 7 } && value[0] == '#'
+        && value.AsSpan(1).IndexOfAnyExcept("0123456789abcdefABCDEF") < 0;
+}
+
+public sealed record ThemeAppearance(int Opacity = 100, int ImageOpacity = 45, string? Image = null,
+    int CardOpacity = 88, bool? WindowAcrylic = null, bool? CardFrosted = null, bool KeepAcrylicWhenInactive = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Frosted = null,
+    int? SidebarOpacity = null, bool SidebarFrosted = false, int ControlTransparency = 0)
+{
+    public static bool IsImageId(string? id) => id is { Length: 32 } && id.AsSpan().IndexOfAnyExcept("0123456789abcdef") < 0;
+
+    public ThemeAppearance Normalize() => this with
+    {
+        Opacity = Math.Clamp(Opacity, 0, 100),
+        ImageOpacity = Math.Clamp(ImageOpacity, 0, 100),
+        CardOpacity = Math.Clamp(CardOpacity, 0, 100),
+        SidebarOpacity = Math.Clamp(SidebarOpacity ?? Opacity, 0, 100),
+        ControlTransparency = Math.Clamp(ControlTransparency, 0, 100),
+        Image = IsImageId(Image) ? Image : null,
+        WindowAcrylic = WindowAcrylic ?? Frosted ?? false,
+        CardFrosted = CardFrosted ?? Frosted ?? false,
+        Frosted = null
+    };
+}
+
+public sealed record Settings
+{
+    public string Transport { get; init; } = "USB";
+    public string Host { get; init; } = "192.168.4.1";
+    public string DapPort { get; init; } = "5555";
+    public string SerialPort { get; init; } = "5556";
+    public string BleName { get; init; } = "ESP-SWD";
+    public string BleAddress { get; init; } = "";
+    public string UsbId { get; init; } = "";
+    public string Target { get; init; } = "stm32f103rc";
+    public string Frequency { get; init; } = "1000";
+    public string ConnectMode { get; init; } = "under-reset";
+    public string Pack { get; init; } = "";
+    public string Image { get; init; } = "";
+    public string BaseAddress { get; init; } = "0x08000000";
+    public string EraseMode { get; init; } = "sector";
+    public bool ResetAfter { get; init; } = true;
+    public string ComPort { get; init; } = "";
+    public string WifiPort { get; init; } = "";
+    public string Baud { get; init; } = "115200";
+    public string Newline { get; init; } = "CRLF";
+    public bool HexSend { get; init; }
+    public bool HexReceive { get; init; }
+    public string OtaImage { get; init; } = "";
+    public string OtaSerial { get; init; } = "";
+    public string OtaPort { get; init; } = "5557";
+    public bool VerifyOnly { get; init; }
+    public string Theme { get; init; } = "system";
+    public ThemeColors? CustomTheme { get; init; }
+    public ThemeAppearance ThemeAppearance { get; init; } = new();
+
+    public static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true
+    };
+
+    public static Settings Load(string path)
+    {
+        Settings? Read(string file)
+        {
+            try { return JsonSerializer.Deserialize<Settings>(File.ReadAllText(file), Json); }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return null; }
+        }
+        var current = Read(path);
+        if (current != null)
+        {
+            try { File.Delete(path + ".tmp"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            return current;
+        }
+        var recovered = Read(path + ".tmp");
+        if (recovered == null) return new();
+        try { File.Move(path + ".tmp", path, true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return recovered;
+    }
+
+    public void Save(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        using (var stream = new FileStream(path + ".tmp", FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true);
+            writer.Write(JsonSerializer.Serialize(this, Json));
+            writer.Flush();
+            stream.Flush(flushToDisk: true);
+        }
+        File.Move(path + ".tmp", path, true);
+    }
+}
+
+public static class Validation
+{
+    public static long Number(string? text, string label, long min, long max)
+    {
+        text = text?.Trim() ?? "";
+        var hex = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase);
+        if (!long.TryParse(hex ? text[2..] : text,
+                hex ? NumberStyles.AllowHexSpecifier : NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out var value) || value < min || value > max)
+            throw new ArgumentException($"{label}须为 {min}～{max} 范围内的整数");
+        return value;
+    }
+
+    public static string FilePath(string? path, params string[] extensions)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) throw new ArgumentException("请选择存在的文件");
+        if (!extensions.Contains(Path.GetExtension(path).ToLowerInvariant()))
+            throw new ArgumentException("支持的文件类型：" + string.Join(" / ", extensions));
+        if (new FileInfo(path).Length == 0) throw new ArgumentException("文件为空");
+        return Path.GetFullPath(path);
+    }
+
+    public static void Link(Settings s)
+    {
+        if (s.Transport is not ("USB" or "WiFi" or "BLE")) throw new ArgumentException("请选择 USB、WiFi 或 BLE");
+        if (s.Transport == "WiFi")
+        {
+            if (string.IsNullOrWhiteSpace(s.Host) || Regex.IsMatch(s.Host, @"[\s/:]"))
+                throw new ArgumentException("请输入设备 IPv4 地址或主机名，端口单独填写");
+        }
+        if (s.Transport == "BLE" && string.IsNullOrWhiteSpace(s.BleName) && string.IsNullOrWhiteSpace(s.BleAddress))
+            throw new ArgumentException("请填写蓝牙设备名称或地址");
+    }
+
+    public static byte[] SerialData(string text, bool hex, string newline)
+    {
+        byte[] data;
+        if (hex)
+        {
+            try { data = Convert.FromHexString(Regex.Replace(text, @"\s", "")); }
+            catch (FormatException) { throw new ArgumentException("HEX 格式示例：01 A5 FF 0D 0A"); }
+        }
+        else data = Encoding.UTF8.GetBytes(text + (newline == "CRLF" ? "\r\n" : newline == "LF" ? "\n" : ""));
+        if (data.Length == 0) throw new ArgumentException("发送内容为空");
+        return data;
+    }
+}

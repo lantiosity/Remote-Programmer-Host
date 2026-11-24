@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://wirelink-theme.example; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>WireLink</title>
+  <script src="theme-init.js"></script>
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="navigation.css">
+  <link rel="stylesheet" href="pickers.css">
+  <link rel="stylesheet" href="wifi.css">
+  <link rel="stylesheet" href="scrollbars.css">
+  <link rel="stylesheet" href="theme.css">
+  <script src="scrollbars.js" defer></script>
+  <script src="pickers.js" defer></script>
+  <script src="requests.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar" data-scroll-area="侧栏">
+    <div class="brand"><div class="brandmark">W<span></span></div><div>WireLink<small>REMOTE PROGRAMMER</small></div><span class="version" data-app-version>—</span></div>
+    <div class="section-label">工作空间</div>
+    <nav class="workspace-nav" aria-label="功能导航">
+      <button class="nav-item" type="button" data-page="flash" aria-controls="page-flash" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-8 12h7l-1 8 8-12h-7z"/></svg>
+        <span>目标芯片烧录</span>
+      </button>
+      <button class="nav-item" type="button" data-page="serial" aria-controls="page-serial">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></svg>
+        <span>串口监视器</span>
+      </button>
+      <button class="nav-item" type="button" data-page="ota" aria-controls="page-ota">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+        <span>烧录器固件升级</span>
+      </button>
+      <button class="nav-item" type="button" data-page="wifi" aria-controls="page-wifi">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a14 14 0 0 1 18 0M6 12.5a9.5 9.5 0 0 1 12 0M9 16a5 5 0 0 1 6 0m-3 3h.01"/></svg>
+        <span>WiFi 配置</span>
+      </button>
+      <button class="nav-item" type="button" data-page="offline" aria-controls="page-offline">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a2 2 0 0 1 2-2Zm2 3v4m3-4v4m3-4v4m-6 6h6"/></svg>
+        <span>离线烧录</span>
+      </button>
+    </nav>
+    <div class="divider"></div>
+    <div class="section-label">通信链路 <span class="online-dot"></span></div>
+    <div class="segmented" id="transport-tabs" role="group" aria-label="通信链路">
+      <button data-transport="USB" class="selected">USB</button><button data-transport="WiFi">WiFi</button><button data-transport="BLE">BLE</button>
+    </div>
+    <section class="link-settings" data-link="USB">
+      <label>CMSIS-DAP 序列号<input data-setting="usb_id" list="probes" aria-label="CMSIS-DAP 序列号" placeholder="扫描并选择 USB 探针"><datalist id="probes"></datalist></label>
+      <button class="button subtle full" data-action="probes"><span>⟳</span> 扫描 USB 探针</button>
+      <p class="hint">连接 ESP32-S3 原生 USB 口。<br>HID 用于烧录，CDC 用于串口。</p>
+    </section>
+    <section class="link-settings hidden" data-link="WiFi">
+      <label>设备 IP / 主机名<input data-setting="host" placeholder="192.168.4.1"></label>
+      <div class="two-col"><label>DAP 端口<input data-setting="dap_port" inputmode="numeric"></label><label>串口端口<input data-setting="serial_port" inputmode="numeric"></label></div>
+      <p class="hint">连接已配置的设备热点，<br>或让电脑与设备处于同一局域网。</p>
+    </section>
+    <section class="link-settings hidden" data-link="BLE">
+      <label>设备名称<input data-setting="ble_name" placeholder="ESP-SWD"></label>
+      <label>蓝牙地址 <span class="optional">可选，优先使用</span><input data-setting="ble_address" placeholder="扫描后选择设备"></label>
+      <button class="button subtle full" data-action="scan">⟳ 扫描蓝牙烧录器</button>
+    </section>
+    <details class="wiring"><summary>接线速查 <span>SWD / UART</span></summary><div>
+      <p><b>GPIO4</b><span>→ SWCLK</span></p><p><b>GPIO5</b><span>↔ SWDIO</span></p><p><b>GPIO6</b><span>→ NRST</span></p><p><b>GPIO17</b><span>→ 目标 RX</span></p><p><b>GPIO18</b><span>← 目标 TX</span></p><p><b>GND</b><span>↔ GND</span></p>
+      <small>目标板独立供电，与烧录器共地。</small>
+    </div></details>
+    <div class="sidebar-bottom"><span class="native-dot"></span><div>Windows Native<small>C# · .NET 8 · WebView2</small></div></div>
+  </aside>
+
+  <main>
+    <header class="workbench-header">
+      <div class="breadcrumb">工作空间 <span>/</span> <b id="breadcrumb">目标芯片烧录</b></div>
+      <div class="window-drag" aria-hidden="true"></div>
+      <div class="header-tools">
+        <label class="theme-picker"><span id="theme-icon" aria-hidden="true">◐</span><select data-setting="theme" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label>
+        <div class="status-pill" id="status"><i></i><span>就绪</span></div>
+        <div class="window-controls" role="group" aria-label="窗口控制">
+          <button type="button" id="open-theme" title="自定义主题" aria-label="自定义主题"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 0 0 0 15h1.2a1.7 1.7 0 0 0 1-3.1 1 1 0 0 1 .6-1.9h1.4A3.3 3.3 0 0 0 17.5 9 7.5 7.5 0 0 0 10 2.5Z"/><path stroke-linecap="round" d="M6.3 9h.01m2.3-3h.01m3.8.7h.01"/></svg></button>
+          <button type="button" data-window-action="minimize" title="最小化" aria-label="最小化"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12"/></svg></button>
+          <button type="button" data-window-action="maximize" title="最大化" aria-label="最大化"><svg class="window-maximize-glyph" viewBox="0 0 20 20" aria-hidden="true"><rect x="4.5" y="4.5" width="11" height="11"/></svg><svg class="window-restore-glyph" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 7V4.5h8.5V13H13"/><rect x="4.5" y="7" width="8.5" height="8.5"/></svg></button>
+          <button type="button" data-window-action="close" title="关闭" aria-label="关闭"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+        </div>
+      </div>
+    </header>
+    <div class="workspace" data-scroll-area="工作区">
+      <section class="page" id="page-flash">
+        <div class="page-heading"><div><div class="eyebrow">PROGRAM YOUR TARGET</div><h1>目标芯片烧录<span class="heading-dot">.</span></h1><p>从固件到设备，通过你选择的链路。</p></div><span class="chip-badge">SWD <span>CONNECTED WORKFLOW</span></span></div>
+        <div class="card target-card"><div class="card-title"><span class="step">01</span><h2>目标配置</h2><button class="text-button" data-action="targets">加载芯片列表 ↗</button></div>
+          <div class="three-col"><div class="picker-field"><label for="target-input">芯片型号</label><div class="picker-control"><input id="target-input" data-setting="target" placeholder="选择芯片型号" readonly role="combobox" aria-expanded="false" aria-controls="target-menu" aria-haspopup="dialog" autocomplete="off"><button id="target-toggle" class="picker-toggle" aria-label="选择芯片型号" aria-expanded="false" aria-controls="target-menu" type="button"></button></div></div>
+            <div class="picker-field"><label for="frequency-input">SWD 时钟 <span class="optional">kHz</span></label><div class="picker-control"><input id="frequency-input" data-setting="frequency" inputmode="numeric" role="combobox" aria-expanded="false" aria-controls="frequency-menu" aria-autocomplete="none" autocomplete="off"><button id="frequency-toggle" class="picker-toggle" aria-label="选择 SWD 频率" aria-expanded="false" aria-controls="frequency-menu" type="button"></button></div></div>
+            <label>连接模式<select data-setting="connect_mode" aria-label="连接模式"><option value="under-reset">Under reset · 复位下连接</option><option value="halt">Halt · 连接后暂停</option><option value="pre-reset">Pre reset · 连接前复位</option><option value="attach">Attach · 附加连接</option></select></label>
+          </div>
+          <div class="file-row"><label>芯片支持包 <span class="optional">DFP .pack，可选</span><div class="file-input"><input data-setting="pack" placeholder="导入厂商 DFP，自动保存到 data/dfp"><button data-browse="pack" aria-label="导入芯片支持包">导入 DFP</button></div></label></div>
+        </div>
+        <div class="card firmware-card"><div class="card-title"><span class="step">02</span><h2>选择固件</h2><span class="format-tags">BIN <i></i> HEX <i></i> ELF <i></i> AXF</span></div>
+          <div class="firmware-picker"><div class="file-glyph">↥</div><div class="file-copy"><strong id="firmware-name">选择要烧录的目标固件</strong><span id="firmware-description">BIN 使用起始地址，HEX / ELF 使用文件内地址</span></div><button class="button" data-browse="image">浏览固件</button></div>
+          <label class="path-field"><input data-setting="image" placeholder="也可在这里输入完整文件路径" aria-label="固件文件路径"></label>
+          <div class="firmware-options"><label>BIN 起始地址<input class="mono" data-setting="base_address"></label><label>擦除策略<select data-setting="erase_mode" aria-label="擦除策略"><option value="sector">按扇区擦除</option><option value="auto">自动选择</option><option value="chip">整片擦除</option></select></label><label class="checkbox"><input type="checkbox" data-setting="reset_after"><span>烧录后复位运行</span></label></div>
+          <div class="action-bar"><button class="button primary" data-action="flash"><span>↯</span> 开始烧录</button><button class="button" data-action="inspect">检测目标</button><button class="button" data-action="reset">复位</button><button class="text-button danger" data-action="erase">整片擦除…</button></div>
+        </div>
+      </section>
+
+      <section class="page hidden" id="page-serial">
+        <div class="page-heading"><div><div class="eyebrow">TALK TO YOUR DEVICE</div><h1>串口监视器<span class="heading-dot">.</span></h1><p>USB CDC、WiFi TCP 与 BLE NUS，统一收发。</p></div><span class="chip-badge">UART <span>LIVE TERMINAL</span></span></div>
+        <div class="card"><div class="card-title"><span class="step">01</span><h2>连接配置</h2><span id="serial-state" class="muted">未连接</span></div>
+          <div class="serial-config"><label>USB COM 口<input data-setting="com_port" list="ports" aria-label="USB COM 口" placeholder="选择 COM 口"><datalist id="ports"></datalist></label><label>本地波特率<input data-setting="baud" list="bauds" inputmode="numeric" aria-label="本地波特率"><datalist id="bauds"><option value="9600"><option value="115200"><option value="230400"><option value="921600"></datalist></label><button class="button" data-action="ports">刷新串口</button><button class="button primary" id="serial-toggle">打开连接</button></div>
+          <p class="hint">WiFi / BLE 使用左侧设备配置；远程 UART 波特率请通过设备控制台 baud 命令设置。</p>
+        </div>
+        <div class="card terminal-card"><div class="card-title"><h2>数据接收</h2><span class="counter" id="byte-count">RX 0 B / TX 0 B</span><button class="text-button" id="clear-terminal">清空</button></div>
+          <pre id="terminal" aria-label="串口接收数据" data-scroll-area="串口接收数据" tabindex="0"><span class="terminal-placeholder">等待设备数据…</span></pre>
+          <div class="send-row"><input id="send-text" placeholder="输入文本或 HEX 字节，例如 01 A5 FF" aria-label="串口发送内容"><button class="button primary" id="send">发送 ↗</button></div>
+          <div class="serial-flags"><label class="checkbox"><input type="checkbox" data-setting="hex_send"><span>HEX 发送</span></label><label class="checkbox"><input type="checkbox" data-setting="hex_receive"><span>HEX 接收</span></label><select data-setting="newline" aria-label="发送换行符"><option>CRLF</option><option>LF</option><option>无</option></select><span class="hint">文本编码 UTF-8 · HEX 不追加换行</span></div>
+        </div>
+      </section>
+
+      <section class="page hidden" id="page-ota">
+        <div class="page-heading"><div><div class="eyebrow">KEEP YOUR PROGRAMMER UP TO DATE</div><h1>烧录器固件升级<span class="heading-dot">.</span></h1><p>通过 USB、WiFi 或蓝牙，更新 ESP32-S3 自身应用。</p></div><span class="chip-badge">OTA <span>USB / WIFI / BLE</span></span></div>
+        <div class="notice"><span>i</span><p>无线升级前，在设备正常运行时长按 <b>BOOT 约 2 秒</b>，或在控制台执行 <code>ota arm 300 wifi</code> / <code>ota arm 300 ble</code> 开放对应链路。USB 自动授权仅用于 USB。<br>BLE OTA 要求加密连接，首次升级将请求 Windows 配对；若未完成，请到系统蓝牙设置配对后重试。升级前停止其他调试与串口连接。</p></div>
+        <div class="card"><div class="card-title"><span class="step">01</span><h2>ESP32 应用镜像</h2><span class="format-tags">esp_swdlink.bin</span></div>
+          <label>固件路径<div class="file-input"><input data-setting="ota_image" placeholder="选择 firmware/build/esp_swdlink.bin"><button data-browse="ota_image">选择文件</button></div></label>
+          <label data-link="WiFi" class="hidden">OTA TCP 端口<input data-setting="ota_port" inputmode="numeric" placeholder="5557" aria-label="OTA TCP 端口"><span class="hint">与固件 OTA 端口一致；通过 USB 或 BLE 读取设备信息可同步此端口。</span></label>
+          <div class="two-col ota-options"><label>设备序列号校验 <span class="optional">建议填写</span><input data-setting="ota_serial" placeholder="从设备状态读取"></label><label class="checkbox"><input type="checkbox" data-setting="verify_only"><span>仅传输校验，不切换启动分区</span></label></div>
+          <div class="action-bar"><button class="button primary" data-action="ota_update">↑ 开始升级…</button><button class="button" data-action="ota_info">读取设备状态</button></div>
+        </div>
+        <div class="card ota-device"><div class="card-title"><h2>设备状态</h2><span class="muted" id="ota-window">尚未读取</span></div><div class="device-grid"><div><span>设备序列号</span><strong id="ota-device">—</strong></div><div><span>固件版本</span><strong id="ota-version">—</strong></div><div><span>运行分区</span><strong id="ota-slot">—</strong></div><div><span>镜像状态</span><strong id="ota-image-state">—</strong></div></div></div>
+        <p class="hint ota-footnote">完整性校验 → 选择启动分区 → 重启 → 新固件启动确认。传输到 100% 后，请等待启动确认结果。</p>
+      </section>
+
+      <section class="page hidden" id="page-wifi">
+        <div class="page-heading"><div><div class="eyebrow">CONNECT YOUR PROGRAMMER</div><h1>WiFi 配置<span class="heading-dot">.</span></h1><p>让烧录器接入你的 2.4 GHz 无线网络。</p></div><span class="chip-badge">WiFi <span>USB / BLE SETUP</span></span></div>
+        <div class="notice"><span>i</span><p>需要烧录器固件 <b>声明配网能力的固件</b>。BLE 保存或清除配置前，长按烧录器 <b>BOOT 约 2 秒</b>开放配置窗口。<br>保存后烧录器会重启；密码不会保存在电脑设置或运行日志中。控制台配网命令可能被设备回显，请勿同时录制控制台。</p></div>
+        <div class="card"><div class="card-title"><span class="step">01</span><h2>连接烧录器</h2></div>
+          <div class="wifi-link-row"><label>配置方式<select id="wifi-link" aria-label="配置方式"><option value="BLE">BLE · 无线配置</option><option value="USB">USB · 原生 USB 接口</option><option value="UART">USB · CH343 控制台</option></select></label><label id="wifi-console" class="hidden">CH343 控制台串口<div class="wifi-port-row"><input data-setting="wifi_port" list="wifi-ports" aria-label="CH343 控制台串口" placeholder="例如 COM8"><datalist id="wifi-ports"></datalist><button class="button" id="wifi-refresh-ports" type="button">刷新串口</button></div></label><button class="button" data-action="wifi_status">读取状态</button></div>
+          <p class="hint" id="wifi-link-hint">使用左侧 BLE 设备名称和蓝牙地址。其他调试、升级或串口任务需先停止。</p>
+          <div class="wifi-status-grid"><div><span>已保存的网络</span><strong id="wifi-current-ssid">尚未读取</strong></div><div><span>联网状态</span><strong id="wifi-connected">—</strong></div><div><span>设备地址</span><strong id="wifi-current-ip">—</strong></div><button class="text-button" id="wifi-use-ip" disabled>用于 WiFi 连接 ↗</button></div>
+        </div>
+        <div class="card"><div class="card-title"><span class="step">02</span><h2>选择无线网络</h2><button class="text-button" data-action="wifi_scan">⟳ 扫描附近网络</button></div>
+          <div id="wifi-networks" data-scroll-area="无线网络列表" role="list" aria-label="无线网络列表"><p class="hint">点击扫描，或直接填写网络名称。只显示烧录器附近的 2.4 GHz 网络。</p></div>
+          <div class="two-col wifi-credentials"><label>网络名称 SSID<input id="wifi-ssid" autocomplete="off" placeholder="支持中文，最多 32 个 UTF-8 字节"></label><label>WiFi 密码<input id="wifi-password" type="password" autocomplete="new-password" placeholder="8～63 字节；开放网络留空"></label></div>
+          <label class="checkbox wifi-show-password"><input type="checkbox" id="wifi-show-password"><span>显示密码</span></label>
+          <p class="hint">支持开放网络与个人密码网络；不支持企业账号认证。扫描最多列出信号较强的 20 条网络。</p>
+          <p id="wifi-result" class="hint" role="status">保存后请等待设备重启，再读取状态查看分配到的 IP 地址。</p>
+          <div class="action-bar"><button class="button primary" data-action="wifi_save">保存并重启</button><button class="text-button danger" data-action="wifi_clear">清除 WiFi 并重启…</button></div>
+        </div>
+      </section>
+      <section class="page hidden" id="page-offline">
+        <div class="page-heading"><div><h1>离线烧录<span class="heading-dot">.</span></h1><p>管理 STM32H743VI（2 MiB）镜像，并导出到 FAT32 microSD。</p></div></div>
+        <div class="card">
+          <div class="card-title"><h2>本地镜像库</h2><button class="text-button" data-offline="offline_list" type="button">刷新列表</button></div>
+          <label>目标芯片镜像 <span class="optional">BIN 文件</span>
+            <div class="file-input"><select id="offline-images" aria-label="目标芯片镜像"><option value="">暂无镜像</option></select><button data-offline="offline_import" type="button">导入镜像</button></div>
+          </label>
+          <p class="hint" id="offline-image-detail">导入的镜像保存在 data/offline。</p>
+          <div class="two-col ota-options">
+            <label>面板起始地址<input id="offline-address" class="mono" value="0x08000000" spellcheck="false"></label>
+            <label class="checkbox"><input id="offline-reset" type="checkbox"><span>完成后复位运行</span></label>
+          </div>
+          <p class="hint" id="offline-range">选择镜像后可查看擦除范围。</p>
+          <div class="action-bar">
+            <button class="button primary" data-offline="offline_export" type="button">导出到 microSD</button>
+            <button class="button" data-offline="offline_preset" type="button">保存面板参数</button>
+            <button class="text-button danger" data-offline="offline_remove" type="button">移除本地镜像…</button>
+          </div>
+          <p class="hint" id="offline-result" role="status"></p>
+        </div>
+        <div class="notice"><span aria-hidden="true">i</span><p>烧录器固件已内置 STM32H743VI 的离线烧录支持，microSD 上只需目标芯片的 BIN 镜像。DFP 用于上位机联机烧录。<br>参数保存在电脑上。插卡后在烧录器面板打开「存储卡镜像」，选择文件并设置地址和复位选项。需要脱卡使用时，在面板选择「保存到板载」。</p></div>
+      </section>
+      <section class="activity-panel">
+        <div class="task-line"><div><span class="task-dot" id="task-dot"></span><strong id="phase">等待操作</strong></div><div><span id="elapsed"></span><button class="text-button" id="cancel" disabled>取消任务</button></div></div>
+        <div class="progress-track"><div id="progress"></div></div>
+        <div class="log-toolbar"><span>运行日志 <b id="log-count">0</b></span><div><button class="text-button" id="clear-log">清空</button><button class="text-button" id="export">导出日志 ↗</button></div></div>
+        <pre id="logs" aria-label="运行日志" data-scroll-area="运行日志" tabindex="0"></pre>
+      </section>
+      <footer><span>WireLink <span data-app-version>—</span> <i>·</i> CMSIS-DAP / SWD</span><span id="footer-hint">配置自动保存于项目目录</span></footer>
+    </div>
+  </main>
+  <section id="target-menu" class="picker-popup target-popup hidden" role="dialog" aria-label="按厂商、系列、型号选择芯片">
+    <div class="picker-search-row"><input id="target-search" type="search" placeholder="搜索芯片、系列或厂商" aria-label="搜索芯片、系列或厂商" autocomplete="off"><button id="target-reload" class="text-button" type="button">刷新列表</button></div>
+    <div id="target-columns" class="target-columns"><div class="target-column"><h3>厂商</h3><div id="target-vendors" class="picker-options" data-scroll-area="芯片厂商" role="listbox" aria-label="芯片厂商"></div></div><div class="target-column"><h3>系列</h3><div id="target-families" class="picker-options" data-scroll-area="芯片系列" role="listbox" aria-label="芯片系列"></div></div><div class="target-column"><h3>型号</h3><div id="target-models" class="picker-options" data-scroll-area="芯片型号" role="listbox" aria-label="芯片型号"></div></div></div>
+    <div class="picker-footnote" id="target-catalog-status" role="status">选择厂商 → 系列 → 型号；未内置的型号请加载 DFP .pack。</div>
+  </section>
+  <section id="frequency-menu" class="picker-popup frequency-popup hidden" aria-label="SWD 频率预设"><div class="picker-menu-heading">SWD 频率预设</div><div id="frequency-options" class="picker-options" data-scroll-area="SWD 频率" role="listbox" aria-label="SWD 频率"></div><div class="picker-footnote">也可手动输入 10～50000 kHz。</div></section>
+  <section id="choice-menu" class="picker-popup choice-popup hidden">
+    <div id="choice-heading" class="picker-menu-heading"></div>
+    <div id="choice-options" class="picker-options" data-scroll-area="下拉选项" role="listbox" aria-labelledby="choice-heading"></div>
+  </section>
+  <div id="toast" role="alert" class="hidden"></div>
+  <dialog id="ble-picker" data-scroll-area="蓝牙设备窗口"><div class="dialog-heading"><h2>选择蓝牙烧录器</h2><button class="text-button" id="close-picker">✕</button></div><div id="ble-devices" data-scroll-area="蓝牙设备列表"></div><p class="hint">同名设备请根据地址选择。</p></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="dialog-heading"><h2 id="confirm-title"></h2></div>
+    <p id="confirm-message"></p>
+    <div class="confirm-actions">
+      <button type="button" class="button" id="confirm-cancel" autofocus>取消</button>
+      <button type="button" class="button primary" id="confirm-accept">确认</button>
+    </div>
+  </dialog>
+  <dialog id="theme-dialog" aria-labelledby="theme-title" aria-describedby="theme-description" data-scroll-area="主题设置">
+    <div class="dialog-heading"><h2 id="theme-title">自定义主题</h2></div>
+    <p id="theme-description">背景透明度实时预览，0% 为实色，100% 为全透。弹窗跟随窗口背景。</p>
+    <div class="theme-colors">
+      <label>强调色<input type="color" data-theme-color="accent" value="#087f80"><output data-theme-value="accent"></output></label>
+      <label>工作区色调<input type="color" data-theme-color="background" value="#f5f7fb"><output data-theme-value="background"></output></label>
+      <label>卡片色调<input type="color" data-theme-color="surface" value="#ffffff"><output data-theme-value="surface"></output></label>
+    </div>
+    <div class="theme-effects">
+      <label class="theme-range">窗口背景透明度<input id="theme-opacity" type="range" min="0" max="100" value="0"><output id="theme-opacity-value">0%</output></label>
+      <label class="theme-range">侧边栏背景透明度<input id="theme-sidebar-opacity" type="range" min="0" max="100" value="0"><output id="theme-sidebar-opacity-value">0%</output></label>
+      <label class="theme-range">卡片背景透明度<input id="theme-card-opacity" type="range" min="0" max="100" value="12"><output id="theme-card-opacity-value">12%</output></label>
+      <label class="theme-range">控件相对透明度<input id="theme-control-transparency" type="range" min="0" max="100" value="0" aria-describedby="theme-control-result"><output id="theme-control-transparency-value">0%</output></label>
+      <p id="theme-control-result" class="theme-effect-detail"></p>
+      <div class="theme-image-row">
+        <span>背景图片 <small id="theme-image-state">未设置</small></span>
+        <button type="button" id="theme-pick-image" class="button">选择图片…</button>
+        <button type="button" id="theme-clear-image" class="text-button">移除</button>
+      </div>
+      <label class="theme-range">背景图片透明度<input id="theme-image-opacity" type="range" min="0" max="100" value="55"><output id="theme-image-opacity-value">55%</output></label>
+      <label class="theme-switch"><span>窗口毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="window_acrylic"></label>
+      <label class="theme-switch"><span>失去焦点时保留窗口毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="keep_acrylic_when_inactive"></label>
+      <label class="theme-switch"><span>侧边栏毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="sidebar_frosted"></label>
+      <label class="theme-switch"><span>卡片毛玻璃</span><input type="checkbox" role="switch" data-theme-switch="card_frosted"></label>
+    </div>
+    <p id="theme-error" role="alert" hidden></p>
+    <div class="theme-actions">
+      <button type="button" id="theme-reset" class="text-button">恢复默认主题</button>
+      <button type="button" id="theme-cancel" class="button">取消</button>
+      <button type="button" id="theme-save" class="button primary">保存主题</button>
+    </div>
+  </dialog>
+</body>
+</html>
