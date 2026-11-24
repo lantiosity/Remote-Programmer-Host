@@ -1,4 +1,4 @@
-# 上位机实现说明（0.2.3）
+# 上位机实现说明（0.3.0）
 
 主程序为 C# / .NET 8 WinForms，WebView2 承载本地 HTML/CSS/JavaScript。设备扫描、BLE DAP 桥、USB/TCP/BLE 串口、ESP32 OTA 及配网是 C# 原生实现；目标 MCU Flash 算法和 CMSIS 设备支持包使用外部 pyOCD 引擎。
 
