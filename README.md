@@ -2,7 +2,7 @@
 
 C# / .NET 8 WinForms + WebView2 远程烧录工作台。支持 USB、WiFi、BLE、目标串口、芯片选择、固件升级及 USB/BLE 配网。固件在独立仓库维护，本仓库不依赖其源码目录。
 
-公开发布候选为 **0.3.1**，配套 ESP32-S3 固件 **0.1.5**。Windows x64 用户可下载发布资产 `WireLink-0.3.1-win-x64.7z`，完整解压后运行 `WireLink.exe`。ESP32 升级时从对应固件发布包选择 `esp_swdlink.bin`。
+当前源码版本为 **0.3.1**，适用于 Windows x64。请按下文构建上位机。ESP32 升级时可选择配套固件 **0.1.5** 构建生成的 `esp_swdlink.bin`。[ESP-SWD 固件仓库](https://github.com/lantiosity/Remote-Programmer-Firmware)
 
 扫描 USB 探针后，在 CMSIS-DAP 序列号下拉列表中选择目标探针。原探针从扫描结果中消失时，相应选择会清空。OTA 则以首次连接读到的序列号为准，重启后核对同一设备的序列号、项目、协议及启动镜像。
 
@@ -51,7 +51,7 @@ python -B tests/test_remote.py
 
 C# 测试需要 pyOCD 解释器，可设置 `WIRELINK_PYTHON`。普通测试不会连接或写入硬件；硬件测试必须显式传入参数。
 
-发布文件、清单和 SHA256 见 [0.3.1 发布说明](release/0.3.1/README.md)。便携包包含运行依赖与语言资源，首次解压时 `data/` 为空。源码 ZIP、版本说明和压缩包校验值纳入 Git，大型便携包及清单放在本地发布目录。版本统一在 `Directory.Build.props` 设置。
+版本统一在 `Directory.Build.props` 设置。生成源码 ZIP 或便携包时，参见[本地打包流程](release/README.md)。
 
 WiFi DAP、串口和 OTA 各自校验端口。WiFi/BLE remote 的大块内存和 AP 请求由上位机分块。BLE 配网和 OTA 均使用加密链路，首次使用请完成 Windows 配对。无线 OTA 或 BLE 配网保存前，请在设备运行时长按 BOOT 约 2 秒开放相应授权窗口。真实 BLE 配对、收发和 OTA 回滚仍待实板验收。
 
