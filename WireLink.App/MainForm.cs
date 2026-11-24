@@ -45,8 +45,10 @@ public sealed class MainForm : ChromeForm
     private bool serialOpening;
     private CancellationTokenSource? serialCancellation;
     private bool closing, allowClose, ready;
-    private bool confirming;
-    private (string Id, TaskCompletionSource<bool> Completion)? pendingConfirmation;
+    private bool confirming, exitPromptOpen;
+    private static readonly TimeSpan ConfirmationTimeout = TimeSpan.FromSeconds(60);
+    private CancellationTokenSource? confirmationCancellation;
+    private (string Id, TaskCompletionSource<bool> Completion, long StartedAt)? pendingConfirmation;
     private bool runtimeSetupAttempted;
     private Task<JsonNode>? initialCatalog;
     private readonly CancellationTokenSource lifetime = new();
@@ -287,7 +289,7 @@ public sealed class MainForm : ChromeForm
             core.DownloadStarting += (_, args) => args.Cancel = true;
             core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
             core.WebMessageReceived += MessageReceivedAsync;
-            core.ProcessFailed += (_, _) => pendingConfirmation?.Completion.TrySetResult(false);
+            core.ProcessFailed += (_, _) => confirmationCancellation?.Cancel();
             // Theme is available before the document's styles or deferred app script run.
             await core.AddScriptToExecuteOnDocumentCreatedAsync($"window.__wirelinkDesktopBackdrop = {(desktopBackdrop ? "true" : "false")}; "
                 + $"window.__wirelinkRegionBackdrop = {(desktopBackdrop && RegionBackdrop.IsSupported ? "true" : "false")}; window.__wirelinkSettings = "
@@ -347,8 +349,11 @@ public sealed class MainForm : ChromeForm
 
     private void Post(object value) => OnUi(() =>
     {
-        if (ready && !web.IsDisposed && web.CoreWebView2 != null)
-            web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value, WebJson));
+        if (ready && !web.IsDisposed && web.CoreWebView2 is { } core)
+        {
+            try { core.PostWebMessageAsJson(JsonSerializer.Serialize(value, WebJson)); }
+            catch (System.Runtime.InteropServices.COMException) { /* The renderer may have exited. */ }
+        }
     });
 
     private void Log(string text)
@@ -381,7 +386,7 @@ public sealed class MainForm : ChromeForm
             id = data.TryGetProperty("id", out var requestId) ? requestId.GetString() : null;
             var action = data.GetProperty("action").GetString()!;
             var value = data.TryGetProperty("settings", out var saved) ? saved.Deserialize<Settings>(Settings.Json) ?? settings : settings;
-            if (closing) throw new InvalidOperationException("程序正在退出");
+            if (closing || exitPromptOpen) throw new InvalidOperationException("程序正在退出");
             switch (action)
             {
                 case "ready":
@@ -418,7 +423,8 @@ public sealed class MainForm : ChromeForm
                     PresentRegionBackdrop();
                     break;
                 case "confirm_result":
-                    if (pendingConfirmation is { } confirmation && data.GetProperty("promptId").GetString() == confirmation.Id)
+                    if (pendingConfirmation is { } confirmation && data.GetProperty("promptId").GetString() == confirmation.Id
+                        && Stopwatch.GetElapsedTime(confirmation.StartedAt) < ConfirmationTimeout)
                         confirmation.Completion.TrySetResult(data.GetProperty("accepted").GetBoolean());
                     break;
                 case "targetsBackground":
@@ -575,25 +581,42 @@ public sealed class MainForm : ChromeForm
 
     private async Task<bool> ConfirmAsync(ConfirmationPrompt prompt)
     {
-        if (confirming) return false;
+        if (confirming || closing || exitPromptOpen) return false;
         confirming = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        confirmationCancellation = cancellation;
         try
         {
             // Let the WebView event return before ShowDialog enters its modal message loop.
             await Task.Yield();
-            if (IsDisposed) return false;
+            if (IsDisposed || cancellation.IsCancellationRequested) return false;
             if (presented && web.CoreWebView2 is { } core)
             {
                 var promptId = Guid.NewGuid().ToString("N");
                 var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                pendingConfirmation = (promptId, completion);
+                pendingConfirmation = (promptId, completion, Stopwatch.GetTimestamp());
                 core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "confirm", promptId, prompt }, WebJson));
-                return await completion.Task;
+                return await completion.Task.WaitAsync(ConfirmationTimeout, cancellation.Token)
+                    && !cancellation.IsCancellationRequested;
             }
             using var dialog = new ConfirmationDialog(prompt, dark, appearance);
-            return dialog.ShowDialog(this) == DialogResult.OK;
+            return dialog.ShowDialog(this) == DialogResult.OK && !cancellation.IsCancellationRequested;
         }
-        finally { pendingConfirmation = null; confirming = false; }
+        catch (TimeoutException)
+        {
+            Post(new { type = "error", text = "确认已超时，操作已取消。请重新发起操作。" });
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { return false; }
+        finally
+        {
+            var dismissed = pendingConfirmation;
+            pendingConfirmation = null;
+            confirmationCancellation = null;
+            confirming = false;
+            if (dismissed is { } confirmation)
+                Post(new { type = "confirm_dismissed", promptId = confirmation.Id });
+        }
     }
 
     private async Task RunJobAsync(string action, Settings value, CancellationToken ct, WifiSetupRequest? wifi = null)
@@ -611,7 +634,8 @@ public sealed class MainForm : ChromeForm
             switch (action)
             {
                 case "wifi_status": case "wifi_scan": case "wifi_save": case "wifi_clear":
-                    Phase(action == "wifi_scan" ? "正在扫描烧录器附近的 2.4 GHz 网络…" : "正在连接 WiFi 配置服务…");
+                    Phase(wifi?.Link == "BLE" ? "正在准备加密配网，首次使用请完成 Windows 蓝牙配对…"
+                        : action == "wifi_scan" ? "正在扫描烧录器附近的 2.4 GHz 网络…" : "正在连接 WiFi 配置服务…");
                     Post(new { type = "data", kind = "wifi_setup", value = await WifiSetupService.RunAsync(value, wifi!, ct) });
                     Log(action is "wifi_save" or "wifi_clear" ? "WiFi 配置已写入，烧录器正在重启。" : "WiFi 配置请求完成。");
                     break;
@@ -813,23 +837,34 @@ public sealed class MainForm : ChromeForm
     {
         if (allowClose) return;
         args.Cancel = true;
-        if (closing || confirming) return;
-        if ((jobCancellation != null || serial != null) && !await ConfirmAsync(new(
-            "退出 WireLink", "退出会取消正在运行的任务，并关闭打开的串口连接。", "确认退出"))) return;
-        closing = true;
-        lifetime.Cancel();
-        Enabled = false;
-        jobCancellation?.Cancel();
-        serialCancellation?.Cancel();
+        if (closing || exitPromptOpen) return;
+        exitPromptOpen = true;
+        confirmationCancellation?.Cancel();
         try
         {
-            if (operation != null) await operation;
-            if (initialCatalog != null) { try { await initialCatalog; } catch { } }
-            if (offlineOperation != null) { try { await offlineOperation; } catch { } }
-            if (themeImageOperation != null) { try { await themeImageOperation; } catch { } }
-            if (serialOpenOperation != null) { try { await serialOpenOperation; } catch { } }
-            await CloseSerialAsync();
+            if (jobCancellation != null || serial != null)
+            {
+                await Task.Yield();
+                using var dialog = new ConfirmationDialog(new("退出 WireLink",
+                    "退出会取消正在运行的任务，并关闭打开的串口连接。", "确认退出"), dark, appearance);
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            }
+            closing = true;
+            lifetime.Cancel();
+            Enabled = false;
+            jobCancellation?.Cancel();
+            serialCancellation?.Cancel();
+            try
+            {
+                if (operation != null) await operation;
+                if (initialCatalog != null) { try { await initialCatalog; } catch { } }
+                if (offlineOperation != null) { try { await offlineOperation; } catch { } }
+                if (themeImageOperation != null) { try { await themeImageOperation; } catch { } }
+                if (serialOpenOperation != null) { try { await serialOpenOperation; } catch { } }
+                await CloseSerialAsync();
+            }
+            finally { backgrounds.Discard(); lifetime.Dispose(); allowClose = true; Close(); }
         }
-        finally { backgrounds.Discard(); lifetime.Dispose(); allowClose = true; Close(); }
+        finally { exitPromptOpen = false; }
     }
 }

@@ -275,23 +275,45 @@ $('#theme-save').addEventListener('click', async () => {
   }
 });
 
-$('#confirm-cancel').addEventListener('click', () => confirmationDialog.close());
-$('#confirm-accept').addEventListener('click', () => confirmationDialog.close('accept'));
-confirmationDialog.addEventListener('close', () => {
-  const promptId = confirmationDialog.dataset.promptId;
-  delete confirmationDialog.dataset.promptId;
-  run('confirm_result', { promptId, accepted: confirmationDialog.returnValue === 'accept' });
+$('#confirm-cancel').addEventListener('click', () => respondToConfirmation(false));
+$('#confirm-accept').addEventListener('click', () => respondToConfirmation(true));
+confirmationDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  respondToConfirmation(false);
 });
 
+function dismissConfirmation(promptId) {
+  if (confirmationDialog.dataset.promptId !== promptId) return;
+  delete confirmationDialog.dataset.promptId;
+  if (confirmationDialog.open) confirmationDialog.close();
+}
+
+function sendConfirmation(promptId, accepted) {
+  return requests.request('confirm_result', { promptId, accepted }).catch(error => toast(error.message));
+}
+
+function respondToConfirmation(accepted) {
+  const promptId = confirmationDialog.dataset.promptId;
+  if (!promptId) return;
+  dismissConfirmation(promptId);
+  sendConfirmation(promptId, accepted);
+}
+
 function showConfirmation({ promptId, prompt }) {
-  pickers.close();
-  confirmationDialog.dataset.promptId = promptId;
-  confirmationDialog.returnValue = '';
-  $('#confirm-title').textContent = prompt.title;
-  $('#confirm-message').textContent = prompt.message;
-  $('#confirm-accept').textContent = prompt.confirmLabel;
-  $('#confirm-accept').classList.toggle('confirm-destructive', prompt.destructive);
-  confirmationDialog.showModal();
+  try {
+    if (confirmationDialog.open) throw new Error('Confirmation already visible');
+    pickers.close();
+    confirmationDialog.dataset.promptId = promptId;
+    $('#confirm-title').textContent = prompt.title;
+    $('#confirm-message').textContent = prompt.message;
+    $('#confirm-accept').textContent = prompt.confirmLabel;
+    $('#confirm-accept').classList.toggle('confirm-destructive', prompt.destructive);
+    confirmationDialog.showModal();
+  } catch {
+    try { dismissConfirmation(promptId); }
+    finally { sendConfirmation(promptId, false); }
+    toast('无法显示确认弹窗，操作已取消。');
+  }
 }
 
 function snapshot() {
@@ -505,6 +527,7 @@ function onMessage(message) {
 function handleMessage(message) {
   switch (message.type) {
     case 'confirm': showConfirmation(message); break;
+    case 'confirm_dismissed': dismissConfirmation(message.promptId); break;
     case 'windowActivation': document.documentElement.toggleAttribute('data-window-inactive', !message.active); break;
     case 'windowSizeMode': showWindowSizeMode(message.maximized); break;
     case 'themeImage':

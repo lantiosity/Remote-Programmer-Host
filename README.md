@@ -49,6 +49,8 @@ node --test tests/*.test.cjs
 python -B tests/test_remote.py
 ```
 
+有固件源码与已解析的 ESP-IDF cJSON 组件时，可用 `python -B tools/check-firmware-contract.py --firmware ../firmware` 运行跨仓库回环测试。测试使用 pyOCD、原生 GCC 和固件的模拟探针。
+
 C# 测试需要 pyOCD 解释器，可设置 `WIRELINK_PYTHON`。普通测试不会连接或写入硬件；硬件测试必须显式传入参数。
 
 发布文件、清单和 SHA256 见 [0.2.4 发布说明](release/0.2.4/README.md)。便携包包含运行依赖与语言资源，首次解压时 `data/` 为空。源码 ZIP、版本说明和压缩包校验值纳入 Git，大型便携包及清单放在本地发布目录。版本统一在 `Directory.Build.props` 设置。

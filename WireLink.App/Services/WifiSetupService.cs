@@ -15,7 +15,7 @@ public static class WifiSetupService
         if (request.Link is not ("USB" or "BLE" or "UART")) throw new ArgumentException("配网请选择 USB 或 BLE");
         WifiSetupProtocol.Command("00000000", request.Operation, request.Ssid, request.Password);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(request.Operation == "scan" ? 90 : 40));
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
         var token = timeout.Token;
         BleConnection? ble = null;
         WiredOtaTransport? usb = null;
@@ -28,6 +28,8 @@ public static class WifiSetupService
                 try { ble = await BleConnection.ConnectAsync(address, "30", token); }
                 catch (IOException ex) when (ex.Message.Contains("缺少蓝牙服务"))
                 { throw new IOException("此固件尚无 BLE 配网接口，请先安装支持配网功能的固件。", ex); }
+                timeout.CancelAfter(Timeout.InfiniteTimeSpan);
+                await ble.EnsureWifiSetupEncryptionAsync(token);
             }
             else if (request.Link == "USB")
             {
@@ -43,6 +45,8 @@ public static class WifiSetupService
                     Encoding = Encoding.UTF8, NewLine = "\r", WriteTimeout = 1500 };
                 port.Open(); port.DiscardInBuffer(); port.Write("\r"); await Task.Delay(150, token); port.DiscardInBuffer();
             }
+
+            timeout.CancelAfter(TimeSpan.FromSeconds(request.Operation == "scan" ? 90 : 40));
 
             async Task<JsonObject> Query(string operation, int page = 0)
             {
@@ -60,10 +64,7 @@ public static class WifiSetupService
                 }
                 if (ble != null)
                 {
-                    var data = Encoding.ASCII.GetBytes(command + "\n");
-                    var chunk = Math.Clamp(ble.Mtu - 3, 20, 244);
-                    for (var offset = 0; offset < data.Length; offset += chunk)
-                        await ble.WriteAsync("31", data.AsSpan(offset, Math.Min(chunk, data.Length - offset)).ToArray(), true, token);
+                    await ble.WriteChunksAsync("31", Encoding.ASCII.GetBytes(command + "\n"), token, response: true);
                     while (true)
                     {
                         var response = WifiSetupProtocol.ParseResponse(Encoding.UTF8.GetString(await ble.ReadAsync("32", token)), id);

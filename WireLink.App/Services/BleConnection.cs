@@ -119,7 +119,11 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
         if (status != GattCommunicationStatus.Success) throw new IOException($"蓝牙 GATT 操作失败：{status}");
     }
 
-    public async Task EnsureOtaEncryptionAsync(CancellationToken ct)
+    public Task EnsureOtaEncryptionAsync(CancellationToken ct) => RequireEncryptionAsync(["21", "22"], ct);
+
+    public Task EnsureWifiSetupEncryptionAsync(CancellationToken ct) => RequireEncryptionAsync(["31", "32"], ct);
+
+    private async Task RequireEncryptionAsync(string[] characteristicIds, CancellationToken ct)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(TimeSpan.FromSeconds(60));
@@ -130,11 +134,11 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
             {
                 var result = await pairing.PairAsync(DevicePairingProtectionLevel.Encryption).AsTask(limit.Token);
                 if (result.Status is not (DevicePairingResultStatus.Paired or DevicePairingResultStatus.AlreadyPaired))
-                    throw new IOException($"蓝牙配对未完成（{result.Status}）。请在 Windows 蓝牙设置中配对烧录器后重试；OTA 要求加密连接。");
+                    throw new IOException($"蓝牙配对未完成（{result.Status}）。请在 Windows 蓝牙设置中配对烧录器后重试。");
             }
             // Pairing alone does not prove that this connection is encrypted.
-            // Require encryption on the two writes so Windows negotiates it.
-            foreach (var id in new[] { "21", "22" })
+            // Require encryption on the GATT operations so Windows negotiates it.
+            foreach (var id in characteristicIds)
                 (await CharacteristicAsync(id, limit.Token)).ProtectionLevel = GattProtectionLevel.EncryptionRequired;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)

@@ -18,6 +18,5 @@ data/
 /release/*/*-win-x64.7z
 /release/*/*-win-x64.manifest.json
 
-# Local cross-repository review notes and diagnostic harness
+# Local cross-repository review notes
 /docs/COMPATIBILITY_FIRMWARE_0.1.1.md
-/tools/check-firmware-contract.py
