@@ -56,11 +56,11 @@
     <section class="link-settings hidden" data-link="WiFi">
       <label>设备 IP / 主机名<input data-setting="host" placeholder="192.168.4.1"></label>
       <div class="two-col"><label>DAP 端口<input data-setting="dap_port" inputmode="numeric"></label><label>串口端口<input data-setting="serial_port" inputmode="numeric"></label></div>
-      <p class="hint">连接设备热点 ESP-SWD，<br>或让电脑与设备处于同一局域网。</p>
+      <p class="hint">连接已配置的设备热点，<br>或让电脑与设备处于同一局域网。</p>
     </section>
     <section class="link-settings hidden" data-link="BLE">
       <label>设备名称<input data-setting="ble_name" placeholder="ESP-SWD"></label>
-      <label>蓝牙地址 <span class="optional">可选，优先使用</span><input data-setting="ble_address" placeholder="1C:29:04:3E:C7:CA"></label>
+      <label>蓝牙地址 <span class="optional">可选，优先使用</span><input data-setting="ble_address" placeholder="扫描后选择设备"></label>
       <button class="button subtle full" data-action="scan">⟳ 扫描蓝牙烧录器</button>
     </section>
     <details class="wiring"><summary>接线速查 <span>SWD / UART</span></summary><div>
@@ -122,7 +122,7 @@
         <div class="card"><div class="card-title"><span class="step">01</span><h2>ESP32 应用镜像</h2><span class="format-tags">esp_swdlink.bin</span></div>
           <label>固件路径<div class="file-input"><input data-setting="ota_image" placeholder="选择 firmware/build/esp_swdlink.bin"><button data-browse="ota_image">选择文件</button></div></label>
           <label data-link="WiFi" class="hidden">OTA TCP 端口<input data-setting="ota_port" inputmode="numeric" placeholder="5557" aria-label="OTA TCP 端口"><span class="hint">与固件 OTA 端口一致；通过 USB 或 BLE 读取设备信息可同步此端口。</span></label>
-          <div class="two-col ota-options"><label>设备序列号校验 <span class="optional">建议填写</span><input data-setting="ota_serial" placeholder="例如 ESP-SWD-3EC7C8"></label><label class="checkbox"><input type="checkbox" data-setting="verify_only"><span>仅传输校验，不切换启动分区</span></label></div>
+          <div class="two-col ota-options"><label>设备序列号校验 <span class="optional">建议填写</span><input data-setting="ota_serial" placeholder="从设备状态读取"></label><label class="checkbox"><input type="checkbox" data-setting="verify_only"><span>仅传输校验，不切换启动分区</span></label></div>
           <div class="action-bar"><button class="button primary" data-action="ota_update">↑ 开始升级…</button><button class="button" data-action="ota_info">读取设备状态</button></div>
         </div>
         <div class="card ota-device"><div class="card-title"><h2>设备状态</h2><span class="muted" id="ota-window">尚未读取</span></div><div class="device-grid"><div><span>设备序列号</span><strong id="ota-device">—</strong></div><div><span>固件版本</span><strong id="ota-version">—</strong></div><div><span>运行分区</span><strong id="ota-slot">—</strong></div><div><span>镜像状态</span><strong id="ota-image-state">—</strong></div></div></div>

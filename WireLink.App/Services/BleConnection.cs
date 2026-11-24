@@ -62,7 +62,7 @@ public sealed class BleConnection : IAsyncDisposable, IBleDapConnection
         {
             var text = s.BleAddress.Replace(":", "").Replace("-", "");
             if (text.Length != 12 || !ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var address))
-                throw new ArgumentException("蓝牙地址格式应为 1C:29:04:3E:C7:CA");
+                throw new ArgumentException("蓝牙地址必须包含 12 个十六进制字符，可用冒号或连字符分隔。");
             return address;
         }
         var devices = await ScanAsync(TimeSpan.FromSeconds(6), ct);

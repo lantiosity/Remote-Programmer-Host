@@ -1,2 +1,0 @@
-eecf5d7ea42b9b21fdb44ce8ab3020be2a3ead68b5e8ca72344fa3ddd999193f  host-0.2.1-source.zip
-61f25fc042c2935cc6e53ab8b29c0c768af0cac26412c3ce532192c4b536ff53  WireLink-0.2.1-win-x64.7z
